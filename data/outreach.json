@@ -1,0 +1,53 @@
+[
+  {
+    "id": "ODEMO01",
+    "lead_id": "L001",
+    "channel": "电话",
+    "outcome": "接通-感兴趣",
+    "need_confirmed": "多工厂算薪与考勤统一，有替换窗口",
+    "objection": "担心迁移成本",
+    "next_step": "加微信发迁移清单",
+    "notes": "HRD认可痛点，同意加微",
+    "agree_wechat": true,
+    "materials_to_send": "案例资料",
+    "assignee": "Ira",
+    "deal_stage": "需求确认",
+    "call_time": "2026-07-30T22:34:21+08:00",
+    "created_at": "2026-07-30T22:34:21+08:00",
+    "updated_at": "2026-07-30T22:34:21+08:00"
+  },
+  {
+    "id": "ODEMO02",
+    "lead_id": "L003",
+    "channel": "电话",
+    "outcome": "接通-感兴趣",
+    "need_confirmed": "B轮后干部梯队与企业大学",
+    "objection": "预算要过董事会",
+    "next_step": "发送人才盘点白皮书",
+    "notes": "CHO时间紧，约下周深聊",
+    "agree_wechat": true,
+    "materials_to_send": "白皮书",
+    "assignee": "Ira",
+    "deal_stage": "需求确认",
+    "call_time": "2026-07-30T22:34:21+08:00",
+    "created_at": "2026-07-30T22:34:21+08:00",
+    "updated_at": "2026-07-30T22:34:21+08:00"
+  },
+  {
+    "id": "ODEMO03",
+    "lead_id": "L006",
+    "channel": "电话",
+    "outcome": "接通-忙线改约",
+    "need_confirmed": "",
+    "objection": "",
+    "next_step": "周四再打",
+    "notes": "在开会，改约",
+    "agree_wechat": false,
+    "materials_to_send": "案例资料",
+    "assignee": "Ira",
+    "deal_stage": "",
+    "call_time": "2026-07-30T22:34:21+08:00",
+    "created_at": "2026-07-30T22:34:21+08:00",
+    "updated_at": "2026-07-30T22:34:21+08:00"
+  }
+]

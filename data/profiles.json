@@ -1,0 +1,244 @@
+[
+  {
+    "id": "PF001",
+    "lead_id": "L001",
+    "company": "星澜智造科技",
+    "industry": "智能制造",
+    "company_size": "800人",
+    "stage": "多工厂扩张",
+    "financing": "A轮后稳健经营",
+    "summary": "华东制造企业，新建华南工厂，在招薪酬绩效专员与HRIS专员，JD提到熟悉北森更好；员工评价有算薪错误、打卡难用。",
+    "jobs": [
+      {
+        "title": "薪酬绩效专员",
+        "desc": "多工厂算薪规则，Excel算薪，熟悉北森优先"
+      },
+      {
+        "title": "HRIS专员",
+        "desc": "维护人事系统，对接钉钉打卡，推进数字化"
+      },
+      {
+        "title": "生产总监",
+        "desc": "新建工厂管理层"
+      }
+    ],
+    "recruiting_text": "在招薪酬绩效专员、HRIS专员、生产总监；要求熟悉北森、Excel算薪、对接钉钉。",
+    "news_text": "去年新建华南工厂，空降生产副总裁。",
+    "review_text": "打卡系统难用；工资算错过；请假麻烦。",
+    "website_text": "数字化转型与智慧工厂。",
+    "contact_title": "人力资源总监",
+    "recent_change": true,
+    "created_at": "2026-07-30T22:32:49+08:00",
+    "updated_at": "2026-07-30T22:32:49+08:00"
+  },
+  {
+    "id": "PF002",
+    "lead_id": "L002",
+    "company": "果味零售集团",
+    "industry": "连锁零售",
+    "company_size": "2000人",
+    "stage": "门店扩张",
+    "financing": "未披露",
+    "summary": "连锁社区零售，新上任HRBP负责人，门店排班与蓝领考勤压力大，在招组织发展经理与培训经理。",
+    "jobs": [
+      {
+        "title": "组织发展经理",
+        "desc": "门店组织效能、OD"
+      },
+      {
+        "title": "培训经理",
+        "desc": "门店培训体系、学习发展"
+      },
+      {
+        "title": "排班专员",
+        "desc": "门店人力排班、劳动力管理"
+      }
+    ],
+    "recruiting_text": "招聘组织发展经理、培训经理、排班专员，强调门店人力与蓝领考勤。",
+    "news_text": "今年计划新开80家社区店。",
+    "review_text": "排班混乱；加班打卡坑；HR不作为。",
+    "website_text": "组织能力升级。",
+    "contact_title": "HRBP负责人",
+    "contact_notes": "新上任到任三个月",
+    "recent_change": true,
+    "created_at": "2026-07-30T22:32:49+08:00",
+    "updated_at": "2026-07-30T22:32:49+08:00"
+  },
+  {
+    "id": "PF003",
+    "lead_id": "L003",
+    "company": "云启软件",
+    "industry": "企业服务 / SaaS",
+    "company_size": "350人",
+    "stage": "B轮扩张",
+    "financing": "B轮",
+    "summary": "SaaS公司刚完成B轮，大规模招聘中高层与HRBP，公开要建人才梯队和企业大学。",
+    "jobs": [
+      {
+        "title": "研发总监",
+        "desc": "中层管理，带30人团队"
+      },
+      {
+        "title": "HRBP",
+        "desc": "业务伙伴，组织发展"
+      },
+      {
+        "title": "企业大学负责人",
+        "desc": "培训体系与人才培养"
+      }
+    ],
+    "recruiting_text": "大规模招聘中高层：研发总监、销售总监；同时招HRBP、企业大学负责人、培训经理。",
+    "news_text": "完成B轮融资，宣布组织规模化与人才战略。",
+    "review_text": "节奏快；晋升不透明。",
+    "website_text": "人才战略、组织能力升级。",
+    "contact_title": "CHO",
+    "recent_change": true,
+    "created_at": "2026-07-30T22:32:49+08:00",
+    "updated_at": "2026-07-30T22:32:49+08:00"
+  },
+  {
+    "id": "PF004",
+    "lead_id": "L004",
+    "company": "晖泽医药",
+    "industry": "医药研发",
+    "company_size": "1200人",
+    "stage": "并购整合",
+    "financing": "上市公司子公司",
+    "summary": "并购后组织并表，公开招标人力资源系统采购，高管变动频繁，需要组织诊断与一体化人事。",
+    "jobs": [
+      {
+        "title": "SSC负责人",
+        "desc": "人事共享、多地分子公司"
+      },
+      {
+        "title": "薪酬经理",
+        "desc": "复杂算薪与并购后薪酬并轨"
+      }
+    ],
+    "recruiting_text": "招聘SSC负责人、薪酬经理；人力资源系统采购招标进行中。",
+    "news_text": "完成并购重组并表；管理层调整，空降COO。",
+    "review_text": "绩效不透明；系统卡。",
+    "website_text": "数字化转型、智慧人力。",
+    "contact_title": "人力资源副总裁",
+    "recent_change": true,
+    "created_at": "2026-07-30T22:32:49+08:00",
+    "updated_at": "2026-07-30T22:32:49+08:00"
+  },
+  {
+    "id": "PF005",
+    "lead_id": "L005",
+    "company": "北岸新能源",
+    "industry": "新能源制造",
+    "company_size": "4500人",
+    "stage": "多基地扩张",
+    "financing": "战略融资",
+    "summary": "新能源多基地，蓝领排班与工时复杂，在招劳动力/排班与绩效经理，部分工厂已用盖雅。",
+    "jobs": [
+      {
+        "title": "劳动力管理专员",
+        "desc": "排班、蓝领考勤、门店人力"
+      },
+      {
+        "title": "绩效经理",
+        "desc": "绩效考核、OKR、目标管理"
+      },
+      {
+        "title": "储备干部",
+        "desc": "中层管理管培"
+      }
+    ],
+    "recruiting_text": "招聘排班/劳动力管理、绩效经理、储备干部；熟悉盖雅优先。",
+    "news_text": "新基地投产，编制激增。",
+    "review_text": "排班不合理；加班多。",
+    "website_text": "组织能力升级。",
+    "contact_title": "组织发展总监",
+    "recent_change": true,
+    "created_at": "2026-07-30T22:32:49+08:00",
+    "updated_at": "2026-07-30T22:32:49+08:00"
+  },
+  {
+    "id": "PF006",
+    "lead_id": "L006",
+    "company": "青禾消费",
+    "industry": "消费品牌",
+    "company_size": "600人",
+    "stage": "品牌扩张",
+    "financing": "战略投资",
+    "summary": "新任HRD三个月，现用钉钉打卡+Excel算薪，员工吐槽算薪错误与请假麻烦，有明确替换窗口。",
+    "jobs": [
+      {
+        "title": "薪酬专员",
+        "desc": "手工考勤、多套工资规则、Excel算薪"
+      },
+      {
+        "title": "HRIS专员",
+        "desc": "对接钉钉，推进人事系统"
+      }
+    ],
+    "recruiting_text": "薪酬专员、HRIS专员；Excel算薪、对接钉钉、多套工资规则。",
+    "news_text": "新任人力资源总监到任三个月，推动管理升级。",
+    "review_text": "算薪错误；打卡系统难用；请假麻烦。",
+    "website_text": "数字化转型。",
+    "contact_title": "HRD",
+    "contact_notes": "新上任HRD",
+    "recent_change": true,
+    "created_at": "2026-07-30T22:32:49+08:00",
+    "updated_at": "2026-07-30T22:32:49+08:00"
+  },
+  {
+    "id": "PF007",
+    "lead_id": "L007",
+    "company": "瀚海教育科技",
+    "industry": "在线教育",
+    "company_size": "280人",
+    "stage": "组织能力建设",
+    "financing": "C轮后",
+    "summary": "教育科技公司要建管理者训练营与企业大学，在招培训经理与学习发展，关注干部带教。",
+    "jobs": [
+      {
+        "title": "培训经理",
+        "desc": "企业大学、学习发展、管理者培养"
+      },
+      {
+        "title": "L&D专家",
+        "desc": "培训体系、人才培养"
+      }
+    ],
+    "recruiting_text": "培训经理、企业大学、学习发展、管理者培养。",
+    "news_text": "发布人才战略，强调干部梯队。",
+    "review_text": "晋升通道不清晰。",
+    "website_text": "人才战略。",
+    "contact_title": "人才发展负责人",
+    "recent_change": false,
+    "created_at": "2026-07-30T22:32:49+08:00",
+    "updated_at": "2026-07-30T22:32:49+08:00"
+  },
+  {
+    "id": "PF008",
+    "lead_id": "L008",
+    "company": "城际出行",
+    "industry": "出行服务",
+    "company_size": "3000人",
+    "stage": "共享服务建设",
+    "financing": "未披露",
+    "summary": "建设HRSSC，多地考勤发薪统一，公开招标与JD要求熟悉红海/用友，偏集团化人事底座。",
+    "jobs": [
+      {
+        "title": "SSC运营经理",
+        "desc": "人事共享、员工关系、多地分子公司"
+      },
+      {
+        "title": "薪酬共享专员",
+        "desc": "多地发薪、熟悉用友HCM"
+      }
+    ],
+    "recruiting_text": "SSC、人事共享、熟悉红海/用友；人力资源系统采购立项。",
+    "news_text": "集团推进共享服务中心与数字化。",
+    "review_text": "流程慢；系统体验一般。",
+    "website_text": "智慧人力。",
+    "contact_title": "共享服务中心负责人",
+    "recent_change": true,
+    "created_at": "2026-07-30T22:32:49+08:00",
+    "updated_at": "2026-07-30T22:32:49+08:00"
+  }
+]

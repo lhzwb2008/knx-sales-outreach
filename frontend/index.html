@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>肯耐珂萨 · 销售陌拜工作台</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body>
+  <div class="app-bg" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true"></div>
+      <div>
+        <div class="brand-name">肯耐珂萨 · 销售陌拜工作台</div>
+        <div class="brand-tag">触达客户 · 挖掘需求 · 建立联系 · 促成交 · Ira</div>
+      </div>
+    </div>
+    <div class="top-actions">
+      <span id="readyBadge" class="badge">准备中…</span>
+      <button class="btn help" id="btnHelp" type="button">使用帮助</button>
+    </div>
+  </header>
+
+  <nav class="subnav top-subnav" aria-label="主导航">
+    <button class="nav-item active" data-view="home">总览</button>
+    <button class="nav-item" data-view="competitors">市场方案参考</button>
+    <button class="nav-item" data-view="scripts">话术库</button>
+  </nav>
+
+  <section class="workflow" id="workflowBar" aria-label="工作流程">
+    <button class="wf-step" data-view="import" data-step="1"><span>1</span>上传名单</button>
+    <button class="wf-step" data-view="analyze" data-step="2"><span>2</span>需求分析</button>
+    <button class="wf-step" data-view="script" data-step="3"><span>3</span>话术触达</button>
+    <button class="wf-step" data-view="record" data-step="4"><span>4</span>记录过程</button>
+    <button class="wf-step" data-view="wechat" data-step="5"><span>5</span>微信待办</button>
+  </section>
+
+  <main class="main">
+    <!-- Home / 总览 -->
+    <section id="view-home" class="view active">
+      <div class="hero-strip">
+        <h1>总览</h1>
+        <p>按优先级跟进客户：导入名单后先做需求分析，再生成话术外呼并记录过程。</p>
+      </div>
+      <div class="stat-grid" id="statGrid"></div>
+      <div class="split">
+        <div class="panel">
+          <div class="panel-h"><h2>流程进度</h2></div>
+          <div id="stepBars" class="tier-bars"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-h"><h2>待加微信</h2><button class="btn small" data-go="wechat">去处理</button></div>
+          <div id="homeWechat" class="list"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-h"><h2>客户（按优先级）</h2><button class="btn small" data-go="analyze">去需求分析</button></div>
+        <div id="homeLeads" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <!-- 1 Import -->
+    <section id="view-import" class="view">
+      <div class="panel">
+        <div class="panel-h"><h2>① 上传客户名单</h2></div>
+        <p class="hint">支持任意表头的 Excel（.xlsx）。系统会自动识别公司、电话等字段。</p>
+        <div class="upload-zone" id="uploadZone">
+          <input type="file" id="excelFile" accept=".xlsx,.xlsm,.xltx" hidden />
+          <div class="upload-inner">
+            <strong>拖拽 Excel 到此处，或点击选择文件</strong>
+            <p class="muted">建议包含：公司、姓名/姓氏、电话、职位、备注</p>
+          </div>
+        </div>
+        <div id="importResult" class="hidden"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-h">
+          <h2>当前名单</h2>
+          <button class="btn secondary small" id="btnManualLead">手工补录一条</button>
+        </div>
+        <div id="importLeads" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <!-- 2 Analyze：客户需求分析列表 -->
+    <section id="view-analyze" class="view">
+      <div class="panel">
+        <div class="panel-h">
+          <h2>② 需求分析</h2>
+          <button class="btn" id="btnBatchAnalyze" type="button">一键分析未处理客户</button>
+        </div>
+        <p class="hint">点击某一行可查看并编辑。分析由智能助手自动完成；你也可补充信息后再次分析。</p>
+        <div id="analyzeTable" class="table-wrap"></div>
+      </div>
+
+      <div class="panel hidden" id="analyzeDetail">
+        <div class="panel-h">
+          <h2 id="analyzeDetailTitle">客户详情</h2>
+          <button class="btn ghost small" id="btnCloseAnalyze" type="button">关闭</button>
+        </div>
+        <div id="analyzeDetailMeta" class="meta-row"></div>
+        <div id="analysisBox" class="analysis"></div>
+        <div class="supplement-box">
+          <label class="full">人工补充（招聘动态、新闻、已知痛点等）
+            <textarea id="supplementText" placeholder="例如：同时在招薪酬专员和 HRIS；员工吐槽打卡难用…"></textarea>
+          </label>
+          <div class="row-actions">
+            <button class="btn" id="btnReAnalyze" type="button">补充后再分析</button>
+            <button class="btn secondary" id="btnGoScriptFromAnalyze" type="button">下一步：生成话术</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3 Script -->
+    <section id="view-script" class="view">
+      <div class="panel">
+        <div class="panel-h"><h2>③ 话术触达 · 已为每位客户预生成开场白</h2></div>
+        <p class="hint">以下话术已按需求分析提前准备好，直接选用外呼即可。首通以确认需求、建立联系为主。</p>
+        <div id="scriptBox" class="script-grid"></div>
+      </div>
+    </section>
+
+    <!-- 4 Record -->
+    <section id="view-record" class="view">
+      <div class="panel">
+        <div class="panel-h"><h2>④ 记录触达过程</h2></div>
+        <p class="hint">通话后请尽快填写。若对方同意加微信，勾选后会自动生成「微信待办」。</p>
+        <form id="outreachForm" class="form-grid"></form>
+        <div class="row-actions">
+          <button class="btn" id="btnSaveOutreach" type="button">保存记录</button>
+        </div>
+        <div id="outreachTable" class="table-wrap" style="margin-top:1.2rem"></div>
+      </div>
+    </section>
+
+    <!-- 5 WeChat -->
+    <section id="view-wechat" class="view">
+      <div class="panel">
+        <div class="panel-h"><h2>⑤ 微信待办 · 加好友并发送资料</h2></div>
+        <p class="hint">对方同意加微信后，这里提醒同事添加并发送资料。</p>
+        <div id="wechatTable" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <section id="view-competitors" class="view">
+      <div class="panel">
+        <div class="panel-h">
+          <h2>市场方案参考</h2>
+          <button class="btn" id="btnNewCompetitor" type="button">+ 新增</button>
+        </div>
+        <p class="hint">识别客户已在使用的方案，决定主打「替换」还是「互补」。本公司不在此列表。</p>
+        <div id="competitorsTable" class="table-wrap"></div>
+      </div>
+      <div class="panel hidden" id="competitorEditor">
+        <form id="competitorForm" class="form-grid"></form>
+        <div class="row-actions">
+          <button class="btn" id="btnSaveCompetitor" type="button">保存</button>
+          <button class="btn ghost" id="btnCancelCompetitor" type="button">取消</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-scripts" class="view">
+      <div class="panel">
+        <div class="panel-h">
+          <h2>话术库</h2>
+          <button class="btn" id="btnNewScript" type="button">+ 话术</button>
+        </div>
+        <div id="scriptsTable" class="table-wrap"></div>
+      </div>
+      <div class="panel hidden" id="scriptEditor">
+        <form id="scriptForm" class="form-grid"></form>
+        <div class="row-actions">
+          <button class="btn" id="btnSaveScript" type="button">保存</button>
+          <button class="btn ghost" id="btnCancelScript" type="button">取消</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast hidden"></div>
+
+  <div id="loadingModal" class="modal loading-modal hidden" role="alertdialog" aria-live="assertive">
+    <div class="loading-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <div id="loadingText">智能助手处理中，请稍候…</div>
+    </div>
+  </div>
+
+  <div id="helpModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card wide">
+      <div class="panel-h">
+        <h2>使用帮助</h2>
+        <button class="btn ghost small" id="helpClose" type="button">关闭</button>
+      </div>
+      <ol class="help-steps" id="helpSteps"></ol>
+      <div class="help-image-wrap">
+        <div id="helpImageStatus" class="muted">流程图加载中…</div>
+        <img id="helpImage" class="help-image hidden" alt="肯耐珂萨销售陌拜使用流程图" />
+      </div>
+      <p class="muted" style="margin-top:0.8rem">作者 Ira · 供肯耐珂萨销售同事日常陌拜使用</p>
+    </div>
+  </div>
+
+  <script src="/js/app.js"></script>
+</body>
+</html>

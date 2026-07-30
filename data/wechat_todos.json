@@ -1,0 +1,44 @@
+[
+  {
+    "id": "WDEMO01",
+    "lead_id": "L001",
+    "company": "星澜智造科技",
+    "contact_name": "王",
+    "phone": "13816782101",
+    "assignee": "Ira",
+    "materials_to_send": "案例资料",
+    "notes": "发送多工厂算薪迁移案例",
+    "due_at": "2026-07-30 18:00",
+    "status": "pending",
+    "created_at": "2026-07-30T22:34:21+08:00",
+    "updated_at": "2026-07-30T22:34:21+08:00"
+  },
+  {
+    "id": "WDEMO02",
+    "lead_id": "L003",
+    "company": "云启软件",
+    "contact_name": "陈",
+    "phone": "13701889056",
+    "assignee": "Ira",
+    "materials_to_send": "白皮书",
+    "notes": "人才盘点与企业大学路径白皮书",
+    "due_at": "2026-07-30 20:00",
+    "status": "pending",
+    "created_at": "2026-07-30T22:34:21+08:00",
+    "updated_at": "2026-07-30T22:34:21+08:00"
+  },
+  {
+    "id": "WDEMO03",
+    "lead_id": "L002",
+    "company": "果味零售集团",
+    "contact_name": "李",
+    "phone": "13921563428",
+    "assignee": "Ira",
+    "materials_to_send": "近期市场活动介绍",
+    "notes": "邀请参加零售门店人效沙龙",
+    "due_at": "2026-07-31 12:00",
+    "status": "pending",
+    "created_at": "2026-07-30T22:34:21+08:00",
+    "updated_at": "2026-07-30T22:34:21+08:00"
+  }
+]
