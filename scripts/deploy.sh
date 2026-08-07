@@ -98,7 +98,7 @@ fi
 fuser -k ${PORT}/tcp 2>/dev/null || true
 sleep 1
 
-# 独立数据备份：timer 与主服务解耦，仅推送 data/*.json 到 GitHub data-backup 分支
+# 独立数据备份：timer 与主服务解耦，直接把 data/*.json 推到 GitHub main 仓库根目录
 chmod +x ${REMOTE_DIR}/scripts/backup_data.sh
 install -m 0644 ${REMOTE_DIR}/scripts/systemd/knx-outreach-backup.service /etc/systemd/system/knx-outreach-backup.service
 install -m 0644 ${REMOTE_DIR}/scripts/systemd/knx-outreach-backup.timer /etc/systemd/system/knx-outreach-backup.timer
@@ -158,7 +158,7 @@ echo
 systemctl --no-pager --full status knx-outreach-backup.timer | head -12 || true
 curl -sf --max-time 25 https://${HTTPS_HOST}/api/health || echo "(HTTPS 若失败，请确认 80/443 已放行且证书签发中)"
 echo
-echo "HTTP:  http://${HOST}:${PORT}/"
-echo "HTTPS: https://${HTTPS_HOST}/"
-echo "数据备份: GitHub 分支 data-backup（timer 每小时；开机约 3 分钟后也会跑）"
+echo "服务地址: https://${HTTPS_HOST}/"
+echo "HTTP 直连: http://${HOST}:${PORT}/"
+echo "数据备份: GitHub main 仓库 data/*.json（timer 每小时；开机约 3 分钟后也会跑）"
 EOF

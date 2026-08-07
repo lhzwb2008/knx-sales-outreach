@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
-# 独立数据备份：只读复制 data/*.json → 当前仓库 data-backup 分支并 push
+# 数据备份：只读复制 data/*.json → 仓库 main 分支根目录 data/ 并 push
 # 不加载、不恢复、不依赖主服务进程。失败不影响陌拜工作台。
 #
 # 环境变量（均可选）:
 #   SOURCE_DATA   默认 /opt/knx-outreach/data
 #   BACKUP_DIR    默认 /opt/knx-outreach-data-backup（独立 clone，与业务目录分离）
 #   BACKUP_REMOTE 默认 git@github.com:lhzwb2008/knx-sales-outreach.git
-#   BACKUP_BRANCH 默认 data-backup
+#   BACKUP_BRANCH 默认 main
 set -euo pipefail
 
 SOURCE_DATA="${SOURCE_DATA:-/opt/knx-outreach/data}"
 BACKUP_DIR="${BACKUP_DIR:-/opt/knx-outreach-data-backup}"
 BACKUP_REMOTE="${BACKUP_REMOTE:-git@github.com:lhzwb2008/knx-sales-outreach.git}"
-BACKUP_BRANCH="${BACKUP_BRANCH:-data-backup}"
+BACKUP_BRANCH="${BACKUP_BRANCH:-main}"
 LOCK_FILE="${LOCK_FILE:-/var/lock/knx-outreach-backup.lock}"
 
 log() { printf '[knx-backup] %s\n' "$*"; }
@@ -34,38 +34,13 @@ ensure_repo() {
   if [[ ! -d "$BACKUP_DIR/.git" ]]; then
     log "首次克隆备份仓库 → $BACKUP_DIR"
     rm -rf "$BACKUP_DIR"
-    git clone --branch main --single-branch "$BACKUP_REMOTE" "$BACKUP_DIR"
+    git clone --branch "$BACKUP_BRANCH" --single-branch "$BACKUP_REMOTE" "$BACKUP_DIR"
   fi
   cd "$BACKUP_DIR"
   git remote set-url origin "$BACKUP_REMOTE"
-  git fetch origin --prune
-
-  if git show-ref --verify --quiet "refs/remotes/origin/$BACKUP_BRANCH"; then
-    git checkout -B "$BACKUP_BRANCH" "origin/$BACKUP_BRANCH"
-  elif git show-ref --verify --quiet "refs/heads/$BACKUP_BRANCH"; then
-    git checkout "$BACKUP_BRANCH"
-  else
-    log "创建 orphan 分支 $BACKUP_BRANCH（仅保留备份数据）"
-    git checkout --orphan "$BACKUP_BRANCH"
-    git rm -rf . >/dev/null 2>&1 || true
-    # 清理未跟踪残留
-    find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
-    mkdir -p data
-    cat > README.md <<'EOF'
-# KNX 智拓 · 业务数据备份
-
-此分支由服务器定时任务自动推送，**仅作备份，不自动回载**。
-
-- 内容：`data/*.json`（leads / outreach / profiles 等）
-- 来源：生产机 `/opt/knx-outreach/data`
-- 不含：`.env`、密钥、上传的二进制大文件
-
-如需人工恢复：把对应 JSON 拷回服务器 `data/` 后重启服务即可。
-EOF
-    git add README.md
-    git -c user.name="knx-backup" -c user.email="backup@knx-outreach.local" \
-      commit -m "chore: init data-backup branch"
-  fi
+  git fetch origin "$BACKUP_BRANCH"
+  git checkout -B "$BACKUP_BRANCH" "origin/$BACKUP_BRANCH"
+  git reset --hard "origin/$BACKUP_BRANCH"
 }
 
 sync_data() {
@@ -98,7 +73,7 @@ PY
 
 commit_and_push() {
   cd "$BACKUP_DIR"
-  # data/ 在主仓 .gitignore 中，备份分支强制纳入
+  # data/ 在 .gitignore 中，强制纳入 JSON 备份
   git add -f data/*.json data/_backup_meta.json 2>/dev/null || git add -f data/
   if git diff --cached --quiet; then
     log "数据无变更，跳过提交"
@@ -108,8 +83,13 @@ commit_and_push() {
   stamp="$(date '+%Y-%m-%d %H:%M:%S %z')"
   git -c user.name="knx-backup" -c user.email="backup@knx-outreach.local" \
     commit -m "backup: ${stamp}"
-  git push -u origin "HEAD:$BACKUP_BRANCH"
-  log "已推送到 origin/$BACKUP_BRANCH"
+  # 若期间有代码推送，rebase 后再推，避免覆盖 main
+  if ! git push origin "HEAD:$BACKUP_BRANCH"; then
+    log "push 失败，尝试 rebase 后重试"
+    git pull --rebase origin "$BACKUP_BRANCH"
+    git push origin "HEAD:$BACKUP_BRANCH"
+  fi
+  log "已推送到 origin/$BACKUP_BRANCH（仓库根目录 data/*.json）"
 }
 
 ensure_repo

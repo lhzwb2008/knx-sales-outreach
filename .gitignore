@@ -10,8 +10,11 @@ server.pid
 .idea/
 .vscode/
 
-# 业务数据：线上数据在服务器 /opt/knx-outreach/data，本地仅演示，不入库
-data/
+# 业务数据：默认忽略；已跟踪的 *.json 仍可提交
+# 线上定时备份会 force-add data/*.json 推到 main，便于直接在仓库根目录查看
+data/*
+!data/.gitkeep
+!data/*.json
 
 # 大文件 / 设计文档：本地保留，不入库
 ppt/
