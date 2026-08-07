@@ -156,6 +156,45 @@
           </div>
 
           <div class="panel">
+            <div class="filter-bar" id="analyzeFilterBar">
+              <label>
+                优先级
+                <select id="analyzeFilterTier">
+                  <option value="all">全部</option>
+                  <option value="P0">P0</option>
+                  <option value="P1">P1</option>
+                  <option value="P2">P2</option>
+                  <option value="P3">P3</option>
+                  <option value="none">未评分</option>
+                </select>
+              </label>
+              <label>
+                状态
+                <select id="analyzeFilterStatus">
+                  <option value="all">全部</option>
+                  <option value="analyzed">已分析</option>
+                  <option value="pending">未分析</option>
+                </select>
+              </label>
+              <label>
+                排序
+                <select id="analyzeSortBy">
+                  <option value="priority">优先级（高→低）</option>
+                  <option value="priority_asc">优先级（低→高）</option>
+                  <option value="score">分数（高→低）</option>
+                  <option value="date_desc">分析日期（新→旧）</option>
+                  <option value="date_asc">分析日期（旧→新）</option>
+                  <option value="created_desc">导入日期（新→旧）</option>
+                  <option value="created_asc">导入日期（旧→新）</option>
+                  <option value="company">公司名</option>
+                </select>
+              </label>
+              <label class="filter-search">
+                搜索
+                <input id="analyzeSearch" type="search" placeholder="公司 / 联系人 / 电话" />
+              </label>
+              <div class="filter-count muted" id="analyzeFilterCount"></div>
+            </div>
             <div id="analyzeTable" class="table-wrap"></div>
           </div>
 

@@ -548,6 +548,43 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent);
   font-size: 0.82rem;
   font-weight: 600;
 }
+.ac-date {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.9;
+}
+
+/* ============ 筛选条 ============ */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem 0.85rem;
+  align-items: flex-end;
+  margin-bottom: 0.95rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--line);
+}
+.filter-bar label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.28rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+.filter-bar select,
+.filter-bar input {
+  min-width: 148px;
+  font-size: 0.88rem;
+  padding: 0.45rem 0.6rem;
+}
+.filter-search { flex: 1 1 180px; }
+.filter-search input { width: 100%; min-width: 180px; }
+.filter-count {
+  margin-left: auto;
+  font-size: 0.84rem;
+  padding-bottom: 0.45rem;
+  white-space: nowrap;
+}
 
 /* ============ 弹层 ============ */
 .toast {

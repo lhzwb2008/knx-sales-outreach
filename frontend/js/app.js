@@ -299,12 +299,110 @@ function productTags(raw) {
     .join("");
 }
 
+function leadDateTs(lead, fields) {
+  for (const f of fields) {
+    const v = lead?.[f];
+    if (!v) continue;
+    const t = Date.parse(v);
+    if (!Number.isNaN(t)) return t;
+  }
+  return 0;
+}
+
+function tierKey(lead) {
+  const tier = String(lead.last_tier || "");
+  if (tier.includes("P0")) return "P0";
+  if (tier.includes("P1")) return "P1";
+  if (tier.includes("P2")) return "P2";
+  if (tier.includes("P3")) return "P3";
+  return "none";
+}
+
+function getAnalyzeFilters() {
+  return {
+    tier: $("#analyzeFilterTier")?.value || "all",
+    status: $("#analyzeFilterStatus")?.value || "all",
+    sort: $("#analyzeSortBy")?.value || "priority",
+    q: ($("#analyzeSearch")?.value || "").trim().toLowerCase(),
+  };
+}
+
+function filterAndSortLeads(leads) {
+  const { tier, status, sort, q } = getAnalyzeFilters();
+  let rows = [...leads];
+
+  if (tier !== "all") {
+    rows = rows.filter((l) => tierKey(l) === tier);
+  }
+  if (status === "analyzed") {
+    rows = rows.filter((l) => Boolean(l.need_analysis));
+  } else if (status === "pending") {
+    rows = rows.filter((l) => !l.need_analysis);
+  }
+  if (q) {
+    rows = rows.filter((l) => {
+      const hay = `${l.company || ""} ${l.name || ""} ${l.phone || ""} ${l.title || ""}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }
+
+  const cmpStr = (a, b) => String(a || "").localeCompare(String(b || ""), "zh");
+  rows.sort((a, b) => {
+    switch (sort) {
+      case "priority_asc":
+        return priorityRank(a) - priorityRank(b) || cmpStr(a.company, b.company);
+      case "score": {
+        const sa = Number(a.last_score);
+        const sb = Number(b.last_score);
+        const na = Number.isNaN(sa) ? -1 : sa;
+        const nb = Number.isNaN(sb) ? -1 : sb;
+        return nb - na || cmpStr(a.company, b.company);
+      }
+      case "date_desc":
+        return (
+          leadDateTs(b, ["last_analyzed_at", "updated_at", "created_at"]) -
+            leadDateTs(a, ["last_analyzed_at", "updated_at", "created_at"]) ||
+          cmpStr(a.company, b.company)
+        );
+      case "date_asc":
+        return (
+          leadDateTs(a, ["last_analyzed_at", "updated_at", "created_at"]) -
+            leadDateTs(b, ["last_analyzed_at", "updated_at", "created_at"]) ||
+          cmpStr(a.company, b.company)
+        );
+      case "created_desc":
+        return leadDateTs(b, ["created_at", "updated_at"]) - leadDateTs(a, ["created_at", "updated_at"]);
+      case "created_asc":
+        return leadDateTs(a, ["created_at", "updated_at"]) - leadDateTs(b, ["created_at", "updated_at"]);
+      case "company":
+        return cmpStr(a.company, b.company);
+      case "priority":
+      default:
+        return priorityRank(b) - priorityRank(a) || cmpStr(a.company, b.company);
+    }
+  });
+  return rows;
+}
+
+function formatShortDate(lead) {
+  const raw = lead.last_analyzed_at || lead.updated_at || lead.created_at || "";
+  if (!raw) return "";
+  return String(raw).replace("T", " ").slice(0, 16);
+}
+
 function renderAnalyzeTable() {
-  const rows = sortByPriority(state.leads);
+  const all = state.leads;
+  const rows = filterAndSortLeads(all);
+  const countEl = $("#analyzeFilterCount");
+  if (countEl) {
+    countEl.textContent = rows.length === all.length ? `共 ${rows.length} 位客户` : `显示 ${rows.length} / ${all.length}`;
+  }
+
   $("#analyzeTable").innerHTML = rows.length
     ? `<div class="analyze-list">${rows
         .map((l) => {
           const analyzed = Boolean(l.need_analysis);
+          const when = formatShortDate(l);
           return `<article class="analyze-card clickable" data-lead="${esc(l.id)}">
             <div class="ac-left">
               <div class="ac-title">
@@ -316,6 +414,7 @@ function renderAnalyzeTable() {
                 <span>${esc(l.title || "职位未知")}</span>
                 <span>${esc(l.phone || "无电话")}</span>
                 ${l.last_score != null ? `<span class="ac-score">${esc(l.last_score)} 分</span>` : ""}
+                ${when ? `<span class="ac-date">${esc(when)}</span>` : ""}
               </div>
             </div>
             <div class="ac-mid">
@@ -330,7 +429,7 @@ function renderAnalyzeTable() {
           </article>`;
         })
         .join("")}</div>`
-    : `<p class="muted">暂无客户。请先在「上传名单」导入 Excel。</p>`;
+    : `<p class="muted">${all.length ? "没有符合筛选条件的客户。" : "暂无客户。请先在「上传名单」导入 Excel。"}</p>`;
 
   $$("#analyzeTable .analyze-card").forEach((card) => {
     card.onclick = () => openAnalyzeLead(card.dataset.lead, true);
@@ -730,6 +829,19 @@ function bindEvents() {
     $("#analyzeDetail").classList.add("hidden");
     state.currentLeadId = null;
   };
+
+  ["analyzeFilterTier", "analyzeFilterStatus", "analyzeSortBy"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.onchange = () => renderAnalyzeTable();
+  });
+  const searchEl = $("#analyzeSearch");
+  if (searchEl) {
+    let t = null;
+    searchEl.oninput = () => {
+      clearTimeout(t);
+      t = setTimeout(() => renderAnalyzeTable(), 180);
+    };
+  }
 
   $("#btnReAnalyze").onclick = async () => {
     if (!state.currentLeadId) return;
