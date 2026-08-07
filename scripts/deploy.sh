@@ -18,6 +18,12 @@ fi
 RSYNC=(sshpass -e rsync -avz -e "ssh -o StrictHostKeyChecking=accept-new")
 SSH=(sshpass -e ssh -o StrictHostKeyChecking=accept-new)
 
+# 数据兼容性约定（务必遵守）：
+# 1) 永不覆盖远端 data/ 与 .env —— 线上 leads/outreach/wechat_todos 等业务数据在这里
+# 2) 启动时 seed_all() 仅在无 .seeded 时写入演示数据；线上已有 .seeded 不会被重置
+# 3) 代码改动应对旧 JSON 字段用 .get(默认值)；禁止把「缺字段」当成错误直接 500
+# 4) 不要在生产调用 POST /api/seed/reset（会清空并重建演示数据）
+# 5) 若变更 JSON 结构（改名/改类型/必填新字段），先做只读兼容或一次性迁移脚本再发布
 echo "==> 同步代码到 ${REMOTE_DIR}（保留远端 .env / data / .venv）…"
 "${RSYNC[@]}" \
   --exclude '.venv' \
@@ -25,6 +31,7 @@ echo "==> 同步代码到 ${REMOTE_DIR}（保留远端 .env / data / .venv）…
   --exclude '.git' \
   --exclude '.env' \
   --exclude 'data/' \
+  --exclude 'data/**' \
   --exclude 'ppt/' \
   --exclude '*.pptx' \
   --exclude '*.ppt' \

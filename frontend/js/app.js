@@ -127,8 +127,7 @@ function formToObject(form) {
 }
 
 function switchView(name) {
-  $$(".wf-step").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
-  $$(".nav-item").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  $$(".side-item").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
   if (name === "home") loadHome();
   if (name === "import") renderImportLeads();
@@ -158,6 +157,48 @@ async function loadAll() {
     badge.textContent = "智能助手未配置";
     badge.className = "badge warn";
   }
+}
+
+// 数字滚动动效
+function animateValue(el, target) {
+  const to = Number(target) || 0;
+  const dur = 700;
+  const t0 = performance.now();
+  const tick = (t) => {
+    const p = Math.min(1, (t - t0) / dur);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(to * eased);
+    if (p < 1) requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+}
+
+// 进度条按宽度入场
+function animateBars(container) {
+  requestAnimationFrame(() => {
+    container.querySelectorAll(".bar > i").forEach((bar) => {
+      const w = bar.dataset.w || "0";
+      bar.style.width = `${w}%`;
+    });
+  });
+}
+
+// 总览客户卡片
+function leadCard(l) {
+  return `<article class="lead-card" data-lead="${esc(l.id)}">
+    <span class="co">${esc(l.company)}</span>
+    <span class="who">${esc(l.name || "客户")} · ${esc(l.title || "职位未知")} · ${esc(l.phone || "无电话")}</span>
+    <div class="foot">
+      <span class="pill ${tierClass(l.last_tier)}">${esc(l.last_tier || "未评分")}</span>
+      ${l.last_score != null ? `<span class="score">${esc(l.last_score)} 分</span>` : `<span class="score">${esc(l.status || "待分析")}</span>`}
+    </div>
+  </article>`;
+}
+
+function bindLeadCards(container, onPick) {
+  container.querySelectorAll(".lead-card").forEach((el) => {
+    el.onclick = () => onPick(el.dataset.lead);
+  });
 }
 
 function leadLabel(l) {
@@ -194,17 +235,21 @@ async function loadHome() {
     ["已触达", c.called],
     ["待加微信", c.wechat_pending],
   ]
-    .map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">${v}</div></div>`)
+    .map(([k, v]) => `<div class="stat"><div class="k">${k}</div><div class="v">0</div></div>`)
     .join("");
+  // 数字滚动
+  const values = [c.leads, c.analyzed, c.called, c.wechat_pending];
+  $$("#statGrid .stat .v").forEach((el, i) => animateValue(el, values[i]));
 
   const steps = dash.steps || {};
   const labels = { 1: "上传名单", 2: "需求分析", 3: "话术触达", 4: "记录过程", 5: "微信待办" };
   const max = Math.max(1, ...Object.values(steps));
   $("#stepBars").innerHTML = [1, 2, 3, 4, 5]
     .map(
-      (n) => `<div class="tier-row"><span>${n}. ${labels[n]}</span><div class="bar"><i style="width:${((steps[n] || 0) / max) * 100}%"></i></div><strong>${steps[n] || 0}</strong></div>`
+      (n) => `<div class="tier-row"><span>${n}. ${labels[n]}</span><div class="bar"><i data-w="${(((steps[n] || 0) / max) * 100).toFixed(1)}"></i></div><strong>${steps[n] || 0}</strong></div>`
     )
     .join("");
+  animateBars($("#stepBars"));
 
   $("#homeWechat").innerHTML = (dash.pending_wechat || []).length
     ? dash.pending_wechat
@@ -215,13 +260,13 @@ async function loadHome() {
     : `<p class="muted">暂无微信待办。</p>`;
 
   const sorted = sortByPriority(state.leads);
-  $("#homeLeads").innerHTML = tableLeadsSimple(sorted);
-  $$("#homeLeads tr.clickable").forEach((tr) => {
-    tr.onclick = () => {
-      state.currentLeadId = tr.getAttribute("data-lead");
-      switchView("analyze");
-      openAnalyzeLead(state.currentLeadId);
-    };
+  $("#homeLeads").innerHTML = sorted.length
+    ? sorted.map(leadCard).join("")
+    : `<p class="muted">暂无客户，请先到「上传名单」导入 Excel。</p>`;
+  bindLeadCards($("#homeLeads"), (id) => {
+    state.currentLeadId = id;
+    switchView("analyze");
+    openAnalyzeLead(id);
   });
 }
 
@@ -236,30 +281,59 @@ function renderImportLeads() {
   });
 }
 
+function clipText(s, n = 90) {
+  const t = String(s || "").replace(/\s+/g, " ").trim();
+  if (!t) return "";
+  return t.length > n ? `${t.slice(0, n)}…` : t;
+}
+
+function productTags(raw) {
+  const parts = String(raw || "")
+    .split(/[、，,/\n]+/)
+    .map((x) => x.trim())
+    .filter(Boolean);
+  if (!parts.length) return `<span class="muted">暂无推荐</span>`;
+  return parts
+    .slice(0, 4)
+    .map((p) => `<span class="tag">${esc(p)}</span>`)
+    .join("");
+}
+
 function renderAnalyzeTable() {
   const rows = sortByPriority(state.leads);
   $("#analyzeTable").innerHTML = rows.length
-    ? `<table><thead><tr>
-      <th>公司</th><th>人</th><th>职位</th><th>电话</th><th>需求分析结果</th><th>推荐产品和服务</th>
-    </tr></thead><tbody>
-    ${rows
-      .map(
-        (l) => `<tr class="clickable" data-lead="${esc(l.id)}">
-        <td><strong>${esc(l.company)}</strong>
-          ${l.last_tier ? `<div><span class="pill ${tierClass(l.last_tier)}">${esc(l.last_tier)}</span></div>` : ""}</td>
-        <td>${esc(l.name || "-")}</td>
-        <td>${esc(l.title || "-")}</td>
-        <td>${esc(l.phone || "-")}</td>
-        <td>${esc(l.need_analysis || "尚未分析")}</td>
-        <td>${esc(l.recommended_products || "-")}</td>
-      </tr>`
-      )
-      .join("")}
-    </tbody></table>`
+    ? `<div class="analyze-list">${rows
+        .map((l) => {
+          const analyzed = Boolean(l.need_analysis);
+          return `<article class="analyze-card clickable" data-lead="${esc(l.id)}">
+            <div class="ac-left">
+              <div class="ac-title">
+                <strong>${esc(l.company)}</strong>
+                <span class="pill ${tierClass(l.last_tier)}">${esc(l.last_tier || "未评分")}</span>
+              </div>
+              <div class="ac-meta">
+                <span>${esc(l.name || "-")}</span>
+                <span>${esc(l.title || "职位未知")}</span>
+                <span>${esc(l.phone || "无电话")}</span>
+                ${l.last_score != null ? `<span class="ac-score">${esc(l.last_score)} 分</span>` : ""}
+              </div>
+            </div>
+            <div class="ac-mid">
+              <div class="ac-label">${analyzed ? "需求摘要" : "分析状态"}</div>
+              <p class="ac-summary">${esc(analyzed ? clipText(l.need_analysis, 96) : "尚未分析 · 点击后由智能助手自动分析")}</p>
+            </div>
+            <div class="ac-right">
+              <div class="ac-label">推荐产品</div>
+              <div class="tag-row">${analyzed ? productTags(l.recommended_products) : `<span class="muted">—</span>`}</div>
+              <div class="ac-action">查看详情 →</div>
+            </div>
+          </article>`;
+        })
+        .join("")}</div>`
     : `<p class="muted">暂无客户。请先在「上传名单」导入 Excel。</p>`;
 
-  $$("#analyzeTable tr.clickable").forEach((tr) => {
-    tr.onclick = () => openAnalyzeLead(tr.dataset.lead, true);
+  $$("#analyzeTable .analyze-card").forEach((card) => {
+    card.onclick = () => openAnalyzeLead(card.dataset.lead, true);
   });
 }
 
@@ -283,7 +357,7 @@ function renderDetailAnalysis(lead, extra = {}) {
     </div>
     <div class="block">
       <h3>推荐产品和服务</h3>
-      <p>${esc(lead.recommended_products || "-")}</p>
+      <div class="tag-row">${productTags(lead.recommended_products)}</div>
     </div>
     ${
       comps.length
@@ -327,9 +401,10 @@ async function openAnalyzeLead(id, autoAnalyze = false) {
   state.currentLeadId = id;
   const lead = state.leads.find((l) => l.id === id);
   if (!lead) return;
-  $("#analyzeDetail").classList.remove("hidden");
+  const detail = $("#analyzeDetail");
+  detail.classList.remove("hidden");
   renderDetailAnalysis(lead, state.analysis?.lead?.id === id ? state.analysis : {});
-  window.scrollTo({ top: $("#analyzeDetail").offsetTop - 16, behavior: "smooth" });
+  window.scrollTo({ top: Math.max(0, detail.offsetTop - 18), behavior: "smooth" });
 
   if (autoAnalyze && !lead.need_analysis) {
     try {
@@ -624,7 +699,7 @@ async function handleExcel(file) {
 }
 
 function bindEvents() {
-  $$(".wf-step, .nav-item, [data-go]").forEach((btn) => {
+  $$(".side-item, [data-go]").forEach((btn) => {
     btn.onclick = () => switchView(btn.dataset.view || btn.dataset.go);
   });
   $("#btnHelp").onclick = openHelp;
