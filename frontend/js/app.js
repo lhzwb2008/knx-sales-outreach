@@ -253,9 +253,16 @@ async function loadHome() {
 
   $("#homeWechat").innerHTML = (dash.pending_wechat || []).length
     ? dash.pending_wechat
-        .map(
-          (t) => `<div class="list-item"><div><strong>${esc(t.company)}</strong><div class="muted">${esc(t.materials_to_send || "")}</div></div><span class="pill">${esc(t.due_at || "")}</span></div>`
-        )
+        .map((t) => {
+          const due = String(t.due_at || "").replace("T", " ").slice(0, 16);
+          return `<div class="list-item">
+            <div class="li-main">
+              <strong class="li-title" title="${esc(t.company || "")}">${esc(t.company || "")}</strong>
+              <div class="muted li-sub">${esc(t.materials_to_send || "")}</div>
+            </div>
+            <span class="pill" title="${esc(due)}">${esc(due)}</span>
+          </div>`;
+        })
         .join("")
     : `<p class="muted">暂无微信待办。</p>`;
 

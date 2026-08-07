@@ -490,12 +490,36 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent);
   border: 1px solid var(--line);
   border-radius: 12px;
   padding: 0.7rem 0.85rem;
-  display: flex;
-  justify-content: space-between;
-  gap: 0.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.65rem;
   align-items: center;
 }
 .list-item:hover { border-color: rgba(0, 168, 216, 0.3); }
+.list-item .li-main {
+  min-width: 0;
+}
+.list-item .li-title {
+  display: block;
+  font-weight: 700;
+  color: var(--ink-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.list-item .li-sub {
+  margin-top: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.list-item .pill {
+  flex-shrink: 0;
+  white-space: nowrap;
+  max-width: 9.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 
 /* ============ 话术卡 ============ */
 .script-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem; }
