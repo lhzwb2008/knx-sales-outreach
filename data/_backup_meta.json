@@ -1,0 +1,28 @@
+{
+  "backed_up_at": "2026-08-07T18:48:36+08:00",
+  "source": "/opt/knx-outreach/data",
+  "files": {
+    "._competitors.json": 163,
+    "._followups.json": 163,
+    "._leads.json": 163,
+    "._outreach.json": 163,
+    "._products.json": 163,
+    "._profiles.json": 163,
+    "._rules.json": 163,
+    "._scoring.json": 163,
+    "._scripts.json": 163,
+    "._settings.json": 163,
+    "._wechat_todos.json": 163,
+    "competitors.json": 5168,
+    "followups.json": 3,
+    "leads.json": 151282,
+    "outreach.json": 18387,
+    "products.json": 2599,
+    "profiles.json": 3,
+    "rules.json": 15432,
+    "scoring.json": 400,
+    "scripts.json": 20135,
+    "settings.json": 319,
+    "wechat_todos.json": 4475
+  }
+}
