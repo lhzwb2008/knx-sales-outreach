@@ -1,0 +1,12 @@
+[Unit]
+Description=KNX Outreach data backup to GitHub (oneshot)
+Documentation=file:///opt/knx-outreach/scripts/backup_data.sh
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+Nice=10
+# 与主服务解耦：不读写主进程，失败也不影响 knx-outreach
+ExecStart=/bin/bash /opt/knx-outreach/scripts/backup_data.sh
+TimeoutStartSec=10min

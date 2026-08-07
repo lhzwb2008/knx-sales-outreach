@@ -8,6 +8,8 @@ HOST="${DEPLOY_HOST:-101.201.237.149}"
 USER="${DEPLOY_USER:-root}"
 REMOTE_DIR="${DEPLOY_DIR:-/opt/knx-outreach}"
 PORT="${DEPLOY_PORT:-8877}"
+# 免费 HTTPS：sslip.io 由 IP 反推（与 grape-schedule / nba-ai 同机模式）
+HTTPS_HOST="${DEPLOY_HTTPS_HOST:-knx-zituo.${HOST}.sslip.io}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 if [[ -z "${SSHPASS:-}" ]]; then
@@ -96,12 +98,67 @@ fi
 fuser -k ${PORT}/tcp 2>/dev/null || true
 sleep 1
 
+# 独立数据备份：timer 与主服务解耦，仅推送 data/*.json 到 GitHub data-backup 分支
+chmod +x ${REMOTE_DIR}/scripts/backup_data.sh
+install -m 0644 ${REMOTE_DIR}/scripts/systemd/knx-outreach-backup.service /etc/systemd/system/knx-outreach-backup.service
+install -m 0644 ${REMOTE_DIR}/scripts/systemd/knx-outreach-backup.timer /etc/systemd/system/knx-outreach-backup.timer
+
+# 免费 HTTPS（Caddy + sslip.io，自动申请证书；不改动已有其它站点块）
+if ! command -v caddy >/dev/null 2>&1; then
+  echo "安装 Caddy…"
+  curl -fsSL "https://caddyserver.com/api/download?os=linux&arch=amd64" -o /usr/local/bin/caddy
+  chmod +x /usr/local/bin/caddy
+fi
+mkdir -p /etc/caddy /var/lib/caddy /var/log/caddy
+if [[ -f /etc/caddy/Caddyfile ]] && grep -qF "${HTTPS_HOST}" /etc/caddy/Caddyfile; then
+  echo "Caddy 已包含 ${HTTPS_HOST}，跳过写入站点块"
+else
+  cat >> /etc/caddy/Caddyfile <<'CADDY'
+
+${HTTPS_HOST} {
+  encode gzip
+  reverse_proxy 127.0.0.1:${PORT}
+}
+CADDY
+fi
+if [[ ! -f /etc/systemd/system/caddy.service ]]; then
+cat > /etc/systemd/system/caddy.service <<'UNIT'
+[Unit]
+Description=Caddy HTTPS reverse proxy
+After=network.target
+
+[Service]
+Type=simple
+User=root
+Environment=HOME=/var/lib/caddy
+Environment=XDG_CONFIG_HOME=/var/lib/caddy/config
+Environment=XDG_DATA_HOME=/var/lib/caddy/data
+WorkingDirectory=/var/lib/caddy
+ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+Restart=always
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+fi
+
 systemctl daemon-reload
 systemctl enable knx-outreach >/dev/null
+systemctl enable caddy >/dev/null 2>&1 || true
 systemctl restart knx-outreach
-sleep 2
+systemctl enable --now knx-outreach-backup.timer >/dev/null
+systemctl reload caddy 2>/dev/null || systemctl restart caddy
+sleep 3
 systemctl --no-pager --full status knx-outreach | head -16
 curl -sf http://127.0.0.1:${PORT}/api/health
 echo
-echo "线上: http://${HOST}:${PORT}/"
+systemctl --no-pager --full status knx-outreach-backup.timer | head -12 || true
+curl -sf --max-time 25 https://${HTTPS_HOST}/api/health || echo "(HTTPS 若失败，请确认 80/443 已放行且证书签发中)"
+echo
+echo "HTTP:  http://${HOST}:${PORT}/"
+echo "HTTPS: https://${HTTPS_HOST}/"
+echo "数据备份: GitHub 分支 data-backup（timer 每小时；开机约 3 分钟后也会跑）"
 EOF

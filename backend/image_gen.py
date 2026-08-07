@@ -19,17 +19,24 @@ def available() -> bool:
 
 
 HELP_PROMPT = """Create a clean horizontal business workflow infographic for Chinese B2B sales users.
-Landscape 16:9, light warm-gray background (#F3F1EC), Kenexa-style professional teal accent (#0F7A62), coral accent (#C45C26).
+Landscape 16:9. Match KNX 智拓 product UI colors exactly:
+- Background: cool light blue-gray gradient (#EEF3F8 to #E8EEF6), subtle soft cyan radial glow top-right (rgba cyan, very faint)
+- Primary accent cyan: #00A8D8
+- Glow accent: #00DDFF
+- Deep navy ink: #0D1526 / #1A2438
+- Soft orange CTA accent: #FF9C00 (use sparingly for step titles or number rings)
+- Cards: pure white (#FFFFFF), soft blue-gray shadow, rounded ~16px
 NO logos, NO watermarks, NO English except step numbers 1-5.
+NO purple, NO teal/green Kenexa look, NO warm cream/beige background, NO terracotta/coral.
 
-Title at top center in clear bold Chinese (exact text):
-「肯耐珂萨销售陌拜 · 使用流程」
+Title at top center in clear bold Chinese navy (exact text):
+「KNX 智拓 · 使用流程」
 
-Subtitle under title (exact):
-「触达客户 · 挖掘需求 · 建立联系 · 促成交」
+Subtitle under title in muted blue-gray (exact):
+「智能拓客 · 需求洞察 · 话术触达 · 促成交」
 
-Draw FIVE numbered rounded steps in a single left-to-right flow with thick teal arrows between them.
-Each step is a white rounded card with a large number circle and EXACT Chinese labels as follows:
+Draw FIVE numbered rounded white cards in a single left-to-right flow with thick cyan (#00A8D8) arrows between them.
+Each card: large cyan/orange number circle, simple flat cyan line-icon, EXACT Chinese labels:
 
 Step 1 title: 上传名单
 Step 1 body: 导入Excel客户表
@@ -51,11 +58,11 @@ Step 5 title: 微信待办
 Step 5 body: 对方同意加微后
 提醒跟进发资料
 
-Bottom footer line (exact Chinese):
+Bottom footer line in muted gray (exact Chinese):
 「作者 Ira · 供肯耐珂萨销售同事日常陌拜使用」
 
-Typography requirements: all Chinese characters must be sharp, large, high-contrast, perfectly legible, no typos, no missing strokes, no garbled glyphs.
-Flat modern infographic style, generous spacing, no clutter, no 3D, no purple neon.
+Typography: all Chinese characters sharp, large, high-contrast, perfectly legible, no typos, no missing strokes, no garbled glyphs.
+Flat modern SaaS infographic, generous spacing, no clutter, no 3D, no neon purple glow.
 """
 
 

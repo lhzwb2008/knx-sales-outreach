@@ -214,7 +214,7 @@ def api_reset_seed() -> dict:
 def help_meta() -> dict:
     exists = config.HELP_IMAGE_PATH.exists() and config.HELP_IMAGE_PATH.stat().st_size > 1000
     return {
-        "title": "使用说明",
+        "title": "KNX 智拓 · 使用说明",
         "steps": [
             {"n": 1, "title": "上传名单", "desc": "导入 Excel 客户表，系统自动识别姓名、电话、公司等字段"},
             {"n": 2, "title": "需求分析", "desc": "智能助手自动分析每位客户的需求与推荐产品，支持人工补充后再分析"},
@@ -225,7 +225,7 @@ def help_meta() -> dict:
         "image_ready": exists,
         "image_url": "/assets/help-workflow.png" if exists else None,
         "author": "Ira",
-        "org": "肯耐珂萨",
+        "org": "KNX 智拓 · 肯耐珂萨",
     }
 
 

@@ -1,0 +1,13 @@
+[Unit]
+Description=Hourly KNX Outreach data backup timer
+# 开机自启；与 knx-outreach.service 无依赖耦合
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=1h
+AccuracySec=1min
+Persistent=true
+Unit=knx-outreach-backup.service
+
+[Install]
+WantedBy=timers.target
