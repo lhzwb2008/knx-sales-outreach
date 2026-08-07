@@ -7,6 +7,12 @@ venv/
 *.tmp
 server.log
 server.pid
-ppt/slides/
 .idea/
 .vscode/
+
+# 大文件 / 设计文档：本地保留，不入库
+ppt/
+HR服务陌拜自动化系统设计.md
+*.pptx
+*.ppt
+*.pdf
