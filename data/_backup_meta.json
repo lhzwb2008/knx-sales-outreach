@@ -1,5 +1,5 @@
 {
-  "backed_up_at": "2026-08-10T15:31:05+08:00",
+  "backed_up_at": "2026-08-10T16:31:25+08:00",
   "source": "/opt/knx-outreach/data",
   "files": {
     "._competitors.json": 163,
@@ -15,14 +15,14 @@
     "._wechat_todos.json": 163,
     "competitors.json": 5168,
     "followups.json": 3,
-    "leads.json": 151282,
-    "outreach.json": 18387,
+    "leads.json": 151284,
+    "outreach.json": 19017,
     "products.json": 2599,
     "profiles.json": 3,
     "rules.json": 15432,
     "scoring.json": 400,
     "scripts.json": 20135,
     "settings.json": 319,
-    "wechat_todos.json": 4679
+    "wechat_todos.json": 5091
   }
 }
