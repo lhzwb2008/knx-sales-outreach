@@ -768,5 +768,27 @@
     "id": "ODF03C9C80D",
     "created_at": "2026-08-11T11:41:51+08:00",
     "updated_at": "2026-08-11T11:41:51+08:00"
+  },
+  {
+    "lead_id": "LB6C5483CD9",
+    "channel": "电话",
+    "script_id": "",
+    "script_version": "A",
+    "call_time": "2026-08-11T14:23:47+08:00",
+    "duration_min": "1",
+    "outcome": "接通-拒绝",
+    "need_confirmed": "",
+    "objection": "",
+    "next_step": "",
+    "notes": "不需要，不在这家公司了，目前无需求。",
+    "agree_wechat": false,
+    "wechat_id_hint": "",
+    "materials_to_send": "案例资料",
+    "assignee": "",
+    "rule_ids": [],
+    "deal_stage": "",
+    "id": "O170F9993C9",
+    "created_at": "2026-08-11T14:23:47+08:00",
+    "updated_at": "2026-08-11T14:23:47+08:00"
   }
 ]
