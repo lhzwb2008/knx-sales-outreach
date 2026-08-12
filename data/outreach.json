@@ -790,5 +790,27 @@
     "id": "O170F9993C9",
     "created_at": "2026-08-11T14:23:47+08:00",
     "updated_at": "2026-08-11T14:23:47+08:00"
+  },
+  {
+    "lead_id": "LAD08EF9EA5",
+    "channel": "电话",
+    "script_id": "T003",
+    "script_version": "A",
+    "call_time": "2026-08-12T16:31:40+08:00",
+    "duration_min": "2",
+    "outcome": "已加微",
+    "need_confirmed": "",
+    "objection": "",
+    "next_step": "",
+    "notes": "考勤和薪酬系统都用的eRoad的系统，暂时不考虑换第三方供应商，培训有需求，但是今年的预算已经用完了，明年的明年再说，不同意加微信，有需求会再联系。",
+    "agree_wechat": false,
+    "wechat_id_hint": "",
+    "materials_to_send": "案例资料",
+    "assignee": "",
+    "rule_ids": [],
+    "deal_stage": "",
+    "id": "O7037F480B3",
+    "created_at": "2026-08-12T16:31:40+08:00",
+    "updated_at": "2026-08-12T16:31:40+08:00"
   }
 ]
