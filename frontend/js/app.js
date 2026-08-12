@@ -1015,10 +1015,8 @@ function bindEvents() {
     if (!form) return;
     const obj = formToObject(form);
     obj.rule_ids = (state.analysis?.rule_hits || []).map((r) => r.rule_id).slice(0, 5);
-    if (obj.duration_min !== undefined && obj.duration_min !== "") {
-      const n = Number(obj.duration_min);
-      obj.duration_min = Number.isNaN(n) ? 0 : n;
-    }
+    if (obj.duration_min === undefined) obj.duration_min = "";
+    else obj.duration_min = String(obj.duration_min);
     try {
       await withLoading("正在保存触达记录…", () =>
         api("/api/outreach", {
