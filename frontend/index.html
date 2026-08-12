@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/styles.css" />
+  <link rel="stylesheet" href="/css/styles.css?v=20260812-lead-modal" />
 </head>
 <body>
   <div class="shell">
@@ -32,18 +32,10 @@
         </button>
         <button class="side-item" data-view="analyze">
           <span class="side-num">2</span>
-          <span>需求分析</span>
-        </button>
-        <button class="side-item" data-view="script">
-          <span class="side-num">3</span>
-          <span>话术触达</span>
-        </button>
-        <button class="side-item" data-view="record">
-          <span class="side-num">4</span>
-          <span>记录过程</span>
+          <span>客户触达</span>
         </button>
         <button class="side-item" data-view="wechat">
-          <span class="side-num">5</span>
+          <span class="side-num">3</span>
           <span>微信待办</span>
         </button>
       </div>
@@ -79,9 +71,9 @@
           <div class="page-head">
             <div>
               <h1>总览</h1>
-              <p>KNX 智拓：名单导入 → 智能需求分析 → 话术触达 → 过程沉淀 → 微信跟进，一站式销售触达。</p>
+              <p>KNX 智拓：名单导入 → 客户触达（分析·话术·记录）→ 微信跟进，一站式销售触达。</p>
             </div>
-            <button class="btn secondary" data-go="analyze" type="button">去需求分析</button>
+            <button class="btn secondary" data-go="analyze" type="button">去客户触达</button>
           </div>
 
           <div class="stat-grid" id="statGrid"></div>
@@ -142,18 +134,26 @@
           </div>
         </section>
 
-        <!-- 需求分析 -->
+        <!-- 客户触达（需求分析 + 话术 + 记录） -->
         <section id="view-analyze" class="view">
           <div class="page-head">
             <div>
-              <h1>需求分析</h1>
-              <p>点击某一行可查看并编辑。分析由智能助手自动完成；你也可补充信息后再次分析。</p>
+              <h1>客户触达</h1>
+              <p>点击客户打开详情：查看需求与话术、外呼并保存记录。默认只显示尚未触达的客户，避免重复拨打。</p>
             </div>
             <button class="btn" id="btnBatchAnalyze" type="button">一键分析未处理客户</button>
           </div>
 
           <div class="panel">
             <div class="filter-bar" id="analyzeFilterBar">
+              <label>
+                触达
+                <select id="analyzeFilterCall">
+                  <option value="pending">未触达</option>
+                  <option value="called">已触达</option>
+                  <option value="all">全部</option>
+                </select>
+              </label>
               <label>
                 优先级
                 <select id="analyzeFilterTier">
@@ -166,7 +166,7 @@
                 </select>
               </label>
               <label>
-                状态
+                分析
                 <select id="analyzeFilterStatus">
                   <option value="all">全部</option>
                   <option value="analyzed">已分析</option>
@@ -193,56 +193,16 @@
               <div class="filter-count muted" id="analyzeFilterCount"></div>
             </div>
             <div id="analyzeTable" class="table-wrap"></div>
-          </div>
-
-          <div class="panel hidden" id="analyzeDetail">
-            <div class="panel-h">
-              <h2 id="analyzeDetailTitle">客户详情</h2>
-              <button class="btn ghost small" id="btnCloseAnalyze" type="button">关闭</button>
-            </div>
-            <div id="analyzeDetailMeta" class="meta-row"></div>
-            <div id="analysisBox" class="analysis"></div>
-            <div class="supplement-box">
-              <label class="full">人工补充（招聘动态、新闻、已知痛点等）
-                <textarea id="supplementText" placeholder="例如：同时在招薪酬专员和 HRIS；员工吐槽打卡难用…"></textarea>
-              </label>
-              <div class="row-actions">
-                <button class="btn" id="btnReAnalyze" type="button">补充后再分析</button>
-                <button class="btn secondary" id="btnGoScriptFromAnalyze" type="button">下一步：生成话术</button>
-              </div>
-            </div>
+            <div class="pager" id="analyzePager"></div>
           </div>
         </section>
 
-        <!-- 话术触达 -->
-        <section id="view-script" class="view">
-          <div class="page-head">
-            <div>
-              <h1>话术触达</h1>
-              <p>以下话术已按需求分析提前准备好，直接选用外呼即可。首通以确认需求、建立联系为主。</p>
-            </div>
-          </div>
-          <div id="scriptBox" class="script-grid"></div>
-        </section>
-
-        <!-- 记录过程 -->
-        <section id="view-record" class="view">
-          <div class="page-head">
-            <div>
-              <h1>记录触达过程</h1>
-              <p>通话后请尽快填写。若对方同意加微信，勾选后会自动生成「微信待办」。</p>
-            </div>
-          </div>
-          <div class="panel">
-            <form id="outreachForm" class="form-grid"></form>
-            <div class="row-actions">
-              <button class="btn" id="btnSaveOutreach" type="button">保存记录</button>
-            </div>
-          </div>
-          <div class="panel">
-            <div class="panel-h"><h2>历史记录</h2></div>
-            <div id="outreachTable" class="table-wrap"></div>
-          </div>
+        <!-- 旧栏目保留兼容，侧栏已合并到「客户触达」 -->
+        <section id="view-script" class="view" hidden aria-hidden="true"></section>
+        <section id="view-record" class="view" hidden aria-hidden="true">
+          <form id="outreachForm" class="hidden"></form>
+          <div id="outreachTable" class="hidden"></div>
+          <button id="btnSaveOutreach" type="button" class="hidden"></button>
         </section>
 
         <!-- 微信待办 -->
@@ -330,6 +290,55 @@
     </div>
   </div>
 
-  <script src="/js/app.js"></script>
+  <div id="leadModal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card lead-modal">
+      <div class="lead-modal-head">
+        <div class="lead-modal-title">
+          <h2 id="leadModalCompany">客户详情</h2>
+          <div class="lead-modal-meta" id="leadModalMeta"></div>
+        </div>
+        <button class="btn ghost small" id="btnCloseLeadModal" type="button">关闭</button>
+      </div>
+
+      <div class="lead-modal-body">
+        <section class="lead-section lead-scripts">
+          <h3>外呼话术（边打边看）</h3>
+          <div id="leadScriptBox"></div>
+        </section>
+
+        <section class="lead-section">
+          <h3>需求分析</h3>
+          <div id="leadAnalysisBox" class="analysis"></div>
+        </section>
+
+        <section class="lead-section">
+          <h3>填写触达记录</h3>
+          <form id="leadOutreachForm" class="form-grid"></form>
+          <div class="row-actions">
+            <button class="btn" id="btnSaveLeadOutreach" type="button">保存记录</button>
+          </div>
+        </section>
+
+        <section class="lead-section">
+          <h3>历史触达记录</h3>
+          <div id="leadHistoryBox" class="table-wrap"></div>
+        </section>
+
+        <section class="lead-section">
+          <h3>人工补充并重新分析</h3>
+          <div class="supplement-box">
+            <label class="full">补充信息（招聘动态、新闻、已知痛点、历史沟通等）
+              <textarea id="supplementText" placeholder="例如：同时在招薪酬专员和 HRIS；员工吐槽打卡难用…"></textarea>
+            </label>
+            <div class="row-actions">
+              <button class="btn secondary" id="btnReAnalyze" type="button">重新分析</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/app.js?v=20260812-lead-modal"></script>
 </body>
 </html>

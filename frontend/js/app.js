@@ -7,9 +7,11 @@ const state = {
   currentLeadId: null,
   analysis: null,
   lastScript: null,
+  analyzePage: 1,
 };
 
 const MATERIAL_OPTIONS = ["案例资料", "白皮书", "近期市场活动介绍", "大师课"];
+const ANALYZE_PAGE_SIZE = 10;
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
@@ -69,6 +71,7 @@ async function api(path, options = {}) {
 
 function toast(msg) {
   const el = $("#toast");
+  if (!el) return;
   el.textContent = msg;
   el.classList.remove("hidden");
   clearTimeout(toast._t);
@@ -127,13 +130,12 @@ function formToObject(form) {
 }
 
 function switchView(name) {
+  if (name === "script" || name === "record") name = "analyze";
   $$(".side-item").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
   if (name === "home") loadHome();
   if (name === "import") renderImportLeads();
   if (name === "analyze") renderAnalyzeTable();
-  if (name === "script") renderScriptView();
-  if (name === "record") renderRecordView();
   if (name === "wechat") renderWechat();
   if (name === "competitors") renderCompetitors();
   if (name === "scripts") renderScripts();
@@ -233,11 +235,15 @@ async function loadHome() {
   $$("#statGrid .stat .v").forEach((el, i) => animateValue(el, values[i]));
 
   const steps = dash.steps || {};
-  const labels = { 1: "上传名单", 2: "需求分析", 3: "话术触达", 4: "记录过程", 5: "微信待办" };
-  const max = Math.max(1, ...Object.values(steps));
-  $("#stepBars").innerHTML = [1, 2, 3, 4, 5]
+  const display = [
+    { n: 1, label: "上传名单", count: steps[1] || 0 },
+    { n: 2, label: "客户触达", count: (steps[2] || 0) + (steps[3] || 0) + (steps[4] || 0) },
+    { n: 3, label: "微信待办", count: steps[5] || 0 },
+  ];
+  const max = Math.max(1, ...display.map((d) => d.count));
+  $("#stepBars").innerHTML = display
     .map(
-      (n) => `<div class="tier-row"><span>${n}. ${labels[n]}</span><div class="bar"><i data-w="${(((steps[n] || 0) / max) * 100).toFixed(1)}"></i></div><strong>${steps[n] || 0}</strong></div>`
+      (d) => `<div class="tier-row"><span>${d.n}. ${d.label}</span><div class="bar"><i data-w="${((d.count / max) * 100).toFixed(1)}"></i></div><strong>${d.count}</strong></div>`
     )
     .join("");
   animateBars($("#stepBars"));
@@ -316,8 +322,23 @@ function tierKey(lead) {
   return "none";
 }
 
+function hasBeenCalled(leadId) {
+  return (state.outreach || []).some((o) => o.lead_id === leadId);
+}
+
+function outreachForLead(leadId) {
+  return (state.outreach || [])
+    .filter((o) => o.lead_id === leadId)
+    .sort(
+      (a, b) =>
+        leadDateTs(b, ["call_time", "created_at", "updated_at"]) -
+        leadDateTs(a, ["call_time", "created_at", "updated_at"])
+    );
+}
+
 function getAnalyzeFilters() {
   return {
+    call: $("#analyzeFilterCall")?.value || "pending",
     tier: $("#analyzeFilterTier")?.value || "all",
     status: $("#analyzeFilterStatus")?.value || "all",
     sort: $("#analyzeSortBy")?.value || "priority",
@@ -325,10 +346,19 @@ function getAnalyzeFilters() {
   };
 }
 
+function resetAnalyzePage() {
+  state.analyzePage = 1;
+}
+
 function filterAndSortLeads(leads) {
-  const { tier, status, sort, q } = getAnalyzeFilters();
+  const { call, tier, status, sort, q } = getAnalyzeFilters();
   let rows = [...leads];
 
+  if (call === "pending") {
+    rows = rows.filter((l) => !hasBeenCalled(l.id));
+  } else if (call === "called") {
+    rows = rows.filter((l) => hasBeenCalled(l.id));
+  }
   if (tier !== "all") {
     rows = rows.filter((l) => tierKey(l) === tier);
   }
@@ -388,6 +418,34 @@ function formatShortDate(lead) {
   return String(raw).replace("T", " ").slice(0, 16);
 }
 
+function renderAnalyzePager(total) {
+  const pager = $("#analyzePager");
+  if (!pager) return;
+  const pages = Math.max(1, Math.ceil(total / ANALYZE_PAGE_SIZE));
+  if (state.analyzePage > pages) state.analyzePage = pages;
+  if (total === 0) {
+    pager.innerHTML = "";
+    return;
+  }
+  pager.innerHTML = `
+    <button class="btn ghost small" type="button" data-page-action="prev" ${state.analyzePage <= 1 ? "disabled" : ""}>上一页</button>
+    <span class="pager-info">第 ${state.analyzePage} / ${pages} 页 · 每页 ${ANALYZE_PAGE_SIZE} 条</span>
+    <button class="btn ghost small" type="button" data-page-action="next" ${state.analyzePage >= pages ? "disabled" : ""}>下一页</button>
+  `;
+  pager.querySelector('[data-page-action="prev"]')?.addEventListener("click", () => {
+    if (state.analyzePage > 1) {
+      state.analyzePage -= 1;
+      renderAnalyzeTable();
+    }
+  });
+  pager.querySelector('[data-page-action="next"]')?.addEventListener("click", () => {
+    if (state.analyzePage < pages) {
+      state.analyzePage += 1;
+      renderAnalyzeTable();
+    }
+  });
+}
+
 function renderAnalyzeTable() {
   const all = state.leads;
   const rows = filterAndSortLeads(all);
@@ -396,16 +454,24 @@ function renderAnalyzeTable() {
     countEl.textContent = rows.length === all.length ? `共 ${rows.length} 位客户` : `显示 ${rows.length} / ${all.length}`;
   }
 
-  $("#analyzeTable").innerHTML = rows.length
-    ? `<div class="analyze-list">${rows
+  const pages = Math.max(1, Math.ceil(rows.length / ANALYZE_PAGE_SIZE));
+  if (state.analyzePage > pages) state.analyzePage = pages;
+  const start = (state.analyzePage - 1) * ANALYZE_PAGE_SIZE;
+  const pageRows = rows.slice(start, start + ANALYZE_PAGE_SIZE);
+
+  $("#analyzeTable").innerHTML = pageRows.length
+    ? `<div class="analyze-list">${pageRows
         .map((l) => {
           const analyzed = Boolean(l.need_analysis);
+          const called = hasBeenCalled(l.id);
           const when = formatShortDate(l);
-          return `<article class="analyze-card clickable" data-lead="${esc(l.id)}">
+          const callCount = outreachForLead(l.id).length;
+          return `<article class="analyze-card clickable ${called ? "is-called" : ""}" data-lead="${esc(l.id)}">
             <div class="ac-left">
               <div class="ac-title">
                 <strong>${esc(l.company)}</strong>
                 <span class="pill ${tierClass(l.last_tier)}">${esc(l.last_tier || "未评分")}</span>
+                <span class="pill ${called ? "called" : "pending-call"}">${called ? `已触达${callCount > 1 ? ` · ${callCount}次` : ""}` : "未触达"}</span>
               </div>
               <div class="ac-meta">
                 <span>${esc(l.name || "-")}</span>
@@ -422,154 +488,105 @@ function renderAnalyzeTable() {
             <div class="ac-right">
               <div class="ac-label">推荐产品</div>
               <div class="tag-row">${analyzed ? productTags(l.recommended_products) : `<span class="muted">—</span>`}</div>
-              <div class="ac-action">查看详情 →</div>
+              <div class="ac-action">打开触达 →</div>
             </div>
           </article>`;
         })
         .join("")}</div>`
     : `<p class="muted">${all.length ? "没有符合筛选条件的客户。" : "暂无客户。请先在「上传名单」导入 Excel。"}</p>`;
 
+  renderAnalyzePager(rows.length);
+
   $$("#analyzeTable .analyze-card").forEach((card) => {
-    card.onclick = () => openAnalyzeLead(card.dataset.lead, true);
+    card.onclick = () => openLeadModal(card.dataset.lead, true);
   });
 }
 
-function renderDetailAnalysis(lead, extra = {}) {
+function renderLeadModalContent(lead, extra = {}) {
   const hits = extra.rule_hits || [];
   const comps = extra.competitor_hits || [];
-  $("#analyzeDetailTitle").textContent = lead.company || "客户详情";
-  $("#analyzeDetailMeta").innerHTML = `
+  const called = hasBeenCalled(lead.id);
+
+  $("#leadModalCompany").textContent = lead.company || "客户详情";
+  $("#leadModalMeta").innerHTML = `
     <span>联系人：<strong>${esc(lead.name || "-")}</strong></span>
     <span>职位：${esc(lead.title || "-")}</span>
-    <span>电话：${esc(lead.phone || "-")}</span>
+    <span class="lead-phone">电话：<strong>${esc(lead.phone || "-")}</strong></span>
     <span class="pill ${tierClass(lead.last_tier)}">${esc(lead.last_tier || "未评分")}</span>
-    ${lead.last_score != null ? `<span>${esc(lead.last_score)} 分</span>` : ""}`;
+    ${lead.last_score != null ? `<span class="ac-score">${esc(lead.last_score)} 分</span>` : ""}
+    <span class="pill ${called ? "called" : "pending-call"}">${called ? "已触达" : "未触达"}</span>
+  `;
 
-  $("#analysisBox").innerHTML = `
+  const opener = lead.phone_opener || "暂无预生成开场白，可先补充信息后重新分析。";
+  const wechat = lead.wechat_invite || "方便加一下微信吗？我把同行业案例发您看一下。";
+  const qs = Array.isArray(lead.script_questions) ? lead.script_questions : [];
+  $("#leadScriptBox").innerHTML = `
+    <div class="script-highlight">
+      <div class="sh-label">电话开场白</div>
+      <p class="sh-body">${esc(opener)}</p>
+    </div>
+    <div class="script-highlight soft">
+      <div class="sh-label">加微信话术</div>
+      <p class="sh-body">${esc(wechat)}</p>
+    </div>
+    <div class="script-highlight soft">
+      <div class="sh-label">探询问题</div>
+      ${
+        qs.length
+          ? `<ol class="sh-questions">${qs.map((q) => `<li>${esc(q)}</li>`).join("")}</ol>`
+          : `<p class="muted">暂无探询问题</p>`
+      }
+    </div>
+  `;
+
+  $("#leadAnalysisBox").innerHTML = `
     <div class="block">
-      <h3>需求分析结果</h3>
-      <p>${esc(lead.need_analysis || "暂无")}</p>
-      ${lead.talk_angle ? `<p class="muted">切入角度：${esc(lead.talk_angle)}</p>` : ""}
-      ${lead.priority_reason ? `<p class="muted">优先原因：${esc(lead.priority_reason)}</p>` : ""}
+      <h4>需求摘要</h4>
+      <p>${esc(lead.need_analysis || "暂无，可补充信息后重新分析")}</p>
     </div>
     <div class="block">
-      <h3>推荐产品和服务</h3>
+      <h4>推荐产品和服务</h4>
       <div class="tag-row">${productTags(lead.recommended_products)}</div>
     </div>
+    ${lead.talk_angle ? `<div class="block"><h4>切入角度</h4><p>${esc(lead.talk_angle)}</p></div>` : ""}
+    ${lead.priority_reason ? `<div class="block"><h4>优先原因</h4><p class="muted">${esc(lead.priority_reason)}</p></div>` : ""}
     ${
       comps.length
-        ? `<div class="block"><h3>客户现有方案参考</h3><ul>${comps
+        ? `<div class="block"><h4>客户现有方案 / 竞品参考</h4><ul>${comps
             .map((c) => `<li><strong>${esc(c.name)}</strong> — ${esc(c.strategy || "")}</li>`)
             .join("")}</ul></div>`
         : ""
     }
     ${
       hits.length
-        ? `<div class="block"><h3>判断依据</h3><ul>${hits
+        ? `<div class="block"><h4>判断依据</h4><ul>${hits
             .slice(0, 5)
             .map((h) => `<li>${esc(h.need)} → ${esc(h.products)}</li>`)
             .join("")}</ul></div>`
         : ""
-    }`;
+    }
+  `;
 
+  buildLeadOutreachForm(lead.id);
+  renderLeadHistory(lead.id);
   $("#supplementText").value = lead.manual_supplement || "";
 }
 
-async function runAiAnalyze(leadId, supplement = "", btn = null) {
-  const res = await withLoading(
-    "正在分析客户需求，请稍候…",
-    () =>
-      api("/api/ai/analyze-need", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lead_id: leadId, supplement }),
-      }),
-    btn
-  );
-  state.analysis = res;
-  state.leads = await api("/api/leads");
-  const lead = state.leads.find((l) => l.id === leadId) || res.lead;
-  renderAnalyzeTable();
-  renderDetailAnalysis(lead, res);
-  return res;
-}
-
-async function openAnalyzeLead(id, autoAnalyze = false) {
-  state.currentLeadId = id;
-  const lead = state.leads.find((l) => l.id === id);
-  if (!lead) return;
-  const detail = $("#analyzeDetail");
-  detail.classList.remove("hidden");
-  renderDetailAnalysis(lead, state.analysis?.lead?.id === id ? state.analysis : {});
-  window.scrollTo({ top: Math.max(0, detail.offsetTop - 18), behavior: "smooth" });
-
-  if (autoAnalyze && !lead.need_analysis) {
-    try {
-      await runAiAnalyze(id, lead.manual_supplement || "");
-      toast("需求分析完成");
-    } catch (e) {
-      toast(e.message);
-    }
-  }
-}
-
-function renderScriptView() {
-  const sorted = sortByPriority(state.leads);
-  if (!sorted.length) {
-    $("#scriptBox").innerHTML = `<p class="muted">暂无客户。请先上传名单并完成需求分析。</p>`;
-    return;
-  }
-  $("#scriptBox").innerHTML = sorted
-    .map((l) => {
-      const opener = l.phone_opener || "暂无预生成话术，请先到「需求分析」完成分析。";
-      const wechat = l.wechat_invite || "方便加一下微信吗？我把同行业案例发您看一下。";
-      const qs = (l.script_questions || []).map((q) => `<li>${esc(q)}</li>`).join("");
-      return `<article class="script-card" data-lead="${esc(l.id)}">
-        <div class="row" style="justify-content:space-between">
-          <h3>${esc(l.company)} · ${esc(l.name || "客户")}</h3>
-          <span class="pill ${tierClass(l.last_tier)}">${esc(l.last_tier || "未评分")}</span>
-        </div>
-        <div class="meta">${esc(l.title || "-")} · ${esc(l.phone || "-")}</div>
-        <div class="meta">需求：${esc(l.need_analysis || "未分析")}</div>
-        <div class="meta">推荐：${esc(l.recommended_products || "-")}</div>
-        <div class="body"><strong>电话开场</strong><br/>${esc(opener)}</div>
-        <div class="meta">加微：${esc(wechat)}</div>
-        ${qs ? `<ul>${qs}</ul>` : ""}
-        <div class="row-actions">
-          <button class="btn small" data-use-script="${esc(l.id)}" type="button">使用此外呼并记录</button>
-        </div>
-      </article>`;
-    })
-    .join("");
-  $$("[data-use-script]").forEach((btn) => {
-    btn.onclick = () => {
-      state.currentLeadId = btn.dataset.useScript;
-      switchView("record");
-      buildOutreachForm(state.currentLeadId, "");
-      toast("已带入客户，可直接填写通话结果");
-    };
-  });
-}
-
-function buildOutreachForm(leadId, scriptId = "") {
-  const leadOpts = state.leads
-    .map((l) => `<option value="${esc(l.id)}" ${l.id === leadId ? "selected" : ""}>${esc(leadLabel(l))}</option>`)
-    .join("");
+function buildLeadOutreachForm(leadId) {
   const scriptOpts = state.scripts
-    .map((s) => `<option value="${esc(s.id)}" ${s.id === scriptId ? "selected" : ""}>${esc(s.name)}</option>`)
+    .map((s) => `<option value="${esc(s.id)}">${esc(s.name)}</option>`)
     .join("");
   const materialOpts = MATERIAL_OPTIONS.map((m) => `<option value="${esc(m)}">${esc(m)}</option>`).join("");
-  $("#outreachForm").innerHTML = [
-    field("客户", "lead_id", `<select name="lead_id">${leadOpts}</select>`, "select"),
+  $("#leadOutreachForm").innerHTML = [
+    `<input type="hidden" name="lead_id" value="${esc(leadId)}" />`,
     field("渠道", "channel", `<select name="channel"><option>电话</option><option>微信</option></select>`, "select"),
-    field("使用话术", "script_id", `<select name="script_id"><option value="">现场发挥</option>${scriptOpts}</select>`, "select"),
-    field("通话时长(分钟)", "duration_min", ""),
     field(
       "通话结果",
       "outcome",
       `<select name="outcome"><option>未接通</option><option>接通-忙线改约</option><option>接通-拒绝</option><option>接通-感兴趣</option><option>已加微</option></select>`,
       "select"
     ),
+    field("通话时长(分钟)", "duration_min", ""),
     field(
       "推进阶段",
       "deal_stage",
@@ -589,28 +606,95 @@ function buildOutreachForm(leadId, scriptId = "") {
       "select"
     ),
     field("跟进人", "assignee", ""),
+    field("使用话术", "script_id", `<select name="script_id"><option value="">现场发挥</option>${scriptOpts}</select>`, "select"),
   ].join("");
 }
 
-function renderRecordView() {
-  buildOutreachForm(state.currentLeadId || state.leads[0]?.id || "");
-  $("#outreachTable").innerHTML = `<table><thead><tr>
-    <th>时间</th><th>公司</th><th>结果</th><th>需求</th><th>资料</th><th>加微</th>
+function renderLeadHistory(leadId) {
+  const rows = outreachForLead(leadId).slice(0, 8);
+  const box = $("#leadHistoryBox");
+  if (!rows.length) {
+    box.innerHTML = `<p class="muted">暂无历史触达记录。</p>`;
+    return;
+  }
+  box.innerHTML = `<table><thead><tr>
+    <th>时间</th><th>渠道</th><th>结果</th><th>确认需求</th><th>异议</th><th>下一步</th><th>备注</th><th>加微</th>
   </tr></thead><tbody>
-  ${state.outreach
-    .map((o) => {
-      const lead = state.leads.find((l) => l.id === o.lead_id);
-      return `<tr>
-        <td>${esc((o.call_time || o.created_at || "").replace("T", " ").slice(0, 16))}</td>
-        <td>${esc(lead?.company || o.lead_id)}</td>
-        <td>${esc(o.outcome)}</td>
-        <td>${esc(o.need_confirmed || "-")}</td>
-        <td>${esc(o.materials_to_send || "-")}</td>
-        <td>${o.agree_wechat ? "是" : "否"}</td>
-      </tr>`;
-    })
+  ${rows
+    .map(
+      (o) => `<tr>
+      <td>${esc((o.call_time || o.created_at || "").replace("T", " ").slice(0, 16))}</td>
+      <td>${esc(o.channel || "-")}</td>
+      <td>${esc(o.outcome || "-")}</td>
+      <td>${esc(o.need_confirmed || "-")}</td>
+      <td>${esc(o.objection || "-")}</td>
+      <td>${esc(o.next_step || "-")}</td>
+      <td>${esc(o.notes || "-")}</td>
+      <td>${o.agree_wechat ? "是" : "否"}</td>
+    </tr>`
+    )
     .join("")}
   </tbody></table>`;
+}
+
+function closeLeadModal() {
+  $("#leadModal")?.classList.add("hidden");
+}
+
+async function runAiAnalyze(leadId, supplement = "", btn = null) {
+  const res = await withLoading(
+    "正在分析客户需求，请稍候…",
+    () =>
+      api("/api/ai/analyze-need", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lead_id: leadId, supplement }),
+      }),
+    btn
+  );
+  state.analysis = res;
+  state.leads = await api("/api/leads");
+  const lead = state.leads.find((l) => l.id === leadId) || res.lead;
+  renderAnalyzeTable();
+  if (!$("#leadModal").classList.contains("hidden") && state.currentLeadId === leadId) {
+    renderLeadModalContent(lead, res);
+  }
+  return res;
+}
+
+async function openLeadModal(id, autoAnalyze = false) {
+  state.currentLeadId = id;
+  const lead = state.leads.find((l) => l.id === id);
+  if (!lead) return;
+  const modal = $("#leadModal");
+  modal.classList.remove("hidden");
+  renderLeadModalContent(lead, state.analysis?.lead?.id === id ? state.analysis : {});
+
+  if (autoAnalyze && !lead.need_analysis) {
+    try {
+      await runAiAnalyze(id, lead.manual_supplement || "");
+      toast("需求分析完成");
+    } catch (e) {
+      toast(e.message);
+    }
+  }
+}
+
+// 兼容旧调用名
+async function openAnalyzeLead(id, autoAnalyze = false) {
+  return openLeadModal(id, autoAnalyze);
+}
+
+function renderScriptView() {
+  // 已合并进客户触达弹框
+}
+
+function buildOutreachForm() {
+  // 已合并进客户触达弹框
+}
+
+function renderRecordView() {
+  // 已合并进客户触达弹框
 }
 
 function renderWechat() {
@@ -855,21 +939,35 @@ function bindEvents() {
     toast("已补录");
   };
 
-  $("#btnCloseAnalyze").onclick = () => {
-    $("#analyzeDetail").classList.add("hidden");
+  $("#btnCloseLeadModal").onclick = () => {
+    closeLeadModal();
     state.currentLeadId = null;
   };
+  $("#leadModal").onclick = (e) => {
+    if (e.target.id === "leadModal") {
+      closeLeadModal();
+      state.currentLeadId = null;
+    }
+  };
 
-  ["analyzeFilterTier", "analyzeFilterStatus", "analyzeSortBy"].forEach((id) => {
+  ["analyzeFilterCall", "analyzeFilterTier", "analyzeFilterStatus", "analyzeSortBy"].forEach((id) => {
     const el = document.getElementById(id);
-    if (el) el.onchange = () => renderAnalyzeTable();
+    if (el) {
+      el.onchange = () => {
+        resetAnalyzePage();
+        renderAnalyzeTable();
+      };
+    }
   });
   const searchEl = $("#analyzeSearch");
   if (searchEl) {
     let t = null;
     searchEl.oninput = () => {
       clearTimeout(t);
-      t = setTimeout(() => renderAnalyzeTable(), 180);
+      t = setTimeout(() => {
+        resetAnalyzePage();
+        renderAnalyzeTable();
+      }, 180);
     };
   }
 
@@ -881,10 +979,6 @@ function bindEvents() {
     } catch (e) {
       toast(e.message);
     }
-  };
-
-  $("#btnGoScriptFromAnalyze").onclick = () => {
-    switchView("script");
   };
 
   $("#btnBatchAnalyze").onclick = async () => {
@@ -906,6 +1000,7 @@ function bindEvents() {
         }
       }, btn);
       state.leads = await api("/api/leads");
+      resetAnalyzePage();
       renderAnalyzeTable();
       toast(`已完成 ${pending.length} 位客户分析`);
     } catch (e) {
@@ -915,21 +1010,39 @@ function bindEvents() {
     }
   };
 
-  $("#btnSaveOutreach").onclick = async () => {
-    const obj = formToObject($("#outreachForm"));
+  $("#btnSaveLeadOutreach").onclick = async () => {
+    const form = $("#leadOutreachForm");
+    if (!form) return;
+    const obj = formToObject(form);
     obj.rule_ids = (state.analysis?.rule_hits || []).map((r) => r.rule_id).slice(0, 5);
-    await api("/api/outreach", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(obj),
-    });
-    state.outreach = await api("/api/outreach");
-    state.wechatTodos = await api("/api/wechat-todos");
-    state.leads = await api("/api/leads");
-    renderRecordView();
-    toast(obj.agree_wechat ? "已保存，并生成微信待办" : "触达记录已保存");
-    if (obj.agree_wechat) switchView("wechat");
+    if (obj.duration_min !== undefined && obj.duration_min !== "") {
+      const n = Number(obj.duration_min);
+      obj.duration_min = Number.isNaN(n) ? 0 : n;
+    }
+    try {
+      await withLoading("正在保存触达记录…", () =>
+        api("/api/outreach", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(obj),
+        })
+      );
+      state.outreach = await api("/api/outreach");
+      state.wechatTodos = await api("/api/wechat-todos");
+      state.leads = await api("/api/leads");
+      renderAnalyzeTable();
+      const lead = state.leads.find((l) => l.id === obj.lead_id);
+      if (lead) renderLeadModalContent(lead, state.analysis?.lead?.id === lead.id ? state.analysis : {});
+      toast(obj.agree_wechat ? "已保存，并生成微信待办" : "触达记录已保存");
+    } catch (e) {
+      toast(e.message || "保存失败");
+    }
   };
+
+  // 兼容旧隐藏按钮，避免空引用
+  if ($("#btnSaveOutreach")) {
+    $("#btnSaveOutreach").onclick = () => $("#btnSaveLeadOutreach")?.click();
+  }
 
   $("#btnNewCompetitor").onclick = () => editCompetitor(null);
   $("#btnCancelCompetitor").onclick = () => $("#competitorEditor").classList.add("hidden");
