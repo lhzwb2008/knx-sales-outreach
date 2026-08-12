@@ -760,6 +760,18 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent);
   opacity: 0.45;
   cursor: not-allowed;
 }
+.col-actions {
+  white-space: nowrap;
+  width: 1%;
+}
+.btn.danger {
+  color: #b42318;
+  border-color: rgba(180, 35, 24, 0.28);
+}
+.btn.danger:hover {
+  background: rgba(180, 35, 24, 0.08);
+  border-color: rgba(180, 35, 24, 0.45);
+}
 
 .help-steps { margin: 0 0 1rem; padding-left: 1.2rem; line-height: 1.6; }
 .help-image-wrap {

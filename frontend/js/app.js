@@ -201,7 +201,7 @@ function leadLabel(l) {
 function tableLeadsSimple(rows) {
   if (!rows.length) return `<p class="muted">暂无客户，请先上传名单。</p>`;
   return `<table><thead><tr>
-    <th>公司</th><th>联系人</th><th>电话</th><th>职位</th><th>状态</th><th>优先级</th>
+    <th>公司</th><th>联系人</th><th>电话</th><th>职位</th><th>状态</th><th>优先级</th><th>操作</th>
   </tr></thead><tbody>
   ${rows
     .map(
@@ -213,10 +213,28 @@ function tableLeadsSimple(rows) {
       <td>${esc(l.status || "-")}</td>
       <td><span class="pill ${tierClass(l.last_tier)}">${esc(l.last_tier || "未评分")}</span>
         ${l.last_score != null ? `<div class="muted">${esc(l.last_score)} 分</div>` : ""}</td>
+      <td class="col-actions">
+        <button class="btn ghost small danger" type="button" data-delete-lead="${esc(l.id)}" title="删除该客户">删除</button>
+      </td>
     </tr>`
     )
     .join("")}
   </tbody></table>`;
+}
+
+async function deleteLeadById(leadId) {
+  const lead = state.leads.find((l) => l.id === leadId);
+  const label = lead ? leadLabel(lead) : leadId;
+  if (!confirm(`确认删除客户「${label}」？\n相关触达记录、微信待办也会一并删除。`)) return false;
+  await api(`/api/leads/${encodeURIComponent(leadId)}`, { method: "DELETE" });
+  state.leads = await api("/api/leads");
+  state.outreach = await api("/api/outreach");
+  state.wechatTodos = await api("/api/wechat-todos");
+  if (state.currentLeadId === leadId) {
+    state.currentLeadId = null;
+    closeLeadModal();
+  }
+  return true;
 }
 
 async function loadHome() {
@@ -277,10 +295,25 @@ async function loadHome() {
 function renderImportLeads() {
   $("#importLeads").innerHTML = tableLeadsSimple(state.leads);
   $$("#importLeads tr.clickable").forEach((tr) => {
-    tr.onclick = () => {
+    tr.onclick = (e) => {
+      if (e.target.closest("[data-delete-lead]")) return;
       state.currentLeadId = tr.getAttribute("data-lead");
       switchView("analyze");
       openAnalyzeLead(state.currentLeadId, true);
+    };
+  });
+  $$("#importLeads [data-delete-lead]").forEach((btn) => {
+    btn.onclick = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      try {
+        const ok = await deleteLeadById(btn.dataset.deleteLead);
+        if (!ok) return;
+        renderImportLeads();
+        toast("客户已删除");
+      } catch (err) {
+        toast(err.message || "删除失败");
+      }
     };
   });
 }

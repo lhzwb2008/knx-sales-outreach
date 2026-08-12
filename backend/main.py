@@ -313,6 +313,16 @@ def delete_lead(lead_id: str) -> dict:
     storage.write_collection(
         "profiles", [p for p in storage.list_items("profiles") if p.get("lead_id") != lead_id]
     )
+    storage.write_collection(
+        "outreach", [o for o in storage.list_items("outreach") if o.get("lead_id") != lead_id]
+    )
+    storage.write_collection(
+        "wechat_todos",
+        [t for t in storage.list_items("wechat_todos") if t.get("lead_id") != lead_id],
+    )
+    storage.write_collection(
+        "followups", [f for f in storage.list_items("followups") if f.get("lead_id") != lead_id]
+    )
     return {"ok": True}
 
 
