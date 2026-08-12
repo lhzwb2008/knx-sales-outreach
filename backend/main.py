@@ -225,11 +225,10 @@ def export_data_zip() -> StreamingResponse:
                 continue
             zf.write(path, arcname=f"{name}.json")
             written += 1
-        # 顺带导出其它业务 json（若有）
         for path in sorted(config.DATA_DIR.glob("*.json")):
             if path.stem in storage.COLLECTIONS:
                 continue
-            if path.name.startswith("_"):
+            if path.name.startswith("_") or path.name.startswith("._"):
                 continue
             zf.write(path, arcname=path.name)
             written += 1

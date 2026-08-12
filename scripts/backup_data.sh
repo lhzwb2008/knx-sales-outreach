@@ -33,6 +33,7 @@ mkdir -p "$dest"
 rsync -a --delete \
   --include='*/' \
   --include='*.json' \
+  --exclude='._*' \
   --exclude='*' \
   "$SOURCE_DATA/" "$dest/"
 
