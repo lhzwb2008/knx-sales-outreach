@@ -31,9 +31,9 @@ dest="${BACKUP_ROOT}/${stamp}"
 mkdir -p "$dest"
 
 rsync -a --delete \
+  --exclude='._*' \
   --include='*/' \
   --include='*.json' \
-  --exclude='._*' \
   --exclude='*' \
   "$SOURCE_DATA/" "$dest/"
 
