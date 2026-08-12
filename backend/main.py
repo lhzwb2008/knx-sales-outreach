@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import io
+import zipfile
 from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -208,6 +210,39 @@ def api_reset_seed() -> dict:
     result = reset_and_seed()
     storage.write_collection("wechat_todos", [])
     return result
+
+
+@app.get("/api/export/data.zip")
+def export_data_zip() -> StreamingResponse:
+    """打包 data/*.json 供本地下载；不写入 Git。"""
+    storage.ensure_data_dir()
+    buf = io.BytesIO()
+    written = 0
+    with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name in storage.COLLECTIONS:
+            path = config.DATA_DIR / f"{name}.json"
+            if not path.exists():
+                continue
+            zf.write(path, arcname=f"{name}.json")
+            written += 1
+        # 顺带导出其它业务 json（若有）
+        for path in sorted(config.DATA_DIR.glob("*.json")):
+            if path.stem in storage.COLLECTIONS:
+                continue
+            if path.name.startswith("_"):
+                continue
+            zf.write(path, arcname=path.name)
+            written += 1
+    if written == 0:
+        raise HTTPException(404, "暂无可导出的数据文件")
+    buf.seek(0)
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    filename = f"knx-data-{stamp}.zip"
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/api/help")

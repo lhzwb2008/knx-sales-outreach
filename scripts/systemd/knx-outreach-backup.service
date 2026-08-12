@@ -1,5 +1,5 @@
 [Unit]
-Description=KNX Outreach data backup to GitHub main (oneshot)
+Description=KNX Outreach local data backup (oneshot)
 Documentation=file:///opt/knx-outreach/scripts/backup_data.sh
 After=network-online.target
 Wants=network-online.target

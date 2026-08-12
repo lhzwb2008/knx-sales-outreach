@@ -1,18 +1,16 @@
 #!/usr/bin/env bash
-# 数据备份：只读复制 data/*.json → 仓库 main 分支根目录 data/ 并 push
+# 本地数据备份：只读复制 data/*.json → 服务器本地目录（不推 Git）
 # 不加载、不恢复、不依赖主服务进程。失败不影响陌拜工作台。
 #
 # 环境变量（均可选）:
 #   SOURCE_DATA   默认 /opt/knx-outreach/data
-#   BACKUP_DIR    默认 /opt/knx-outreach-data-backup（独立 clone，与业务目录分离）
-#   BACKUP_REMOTE 默认 git@github.com:lhzwb2008/knx-sales-outreach.git
-#   BACKUP_BRANCH 默认 main
+#   BACKUP_ROOT   默认 /var/backups/knx-outreach
+#   KEEP_COUNT    保留最近 N 份快照，默认 48（约两天每小时）
 set -euo pipefail
 
 SOURCE_DATA="${SOURCE_DATA:-/opt/knx-outreach/data}"
-BACKUP_DIR="${BACKUP_DIR:-/opt/knx-outreach-data-backup}"
-BACKUP_REMOTE="${BACKUP_REMOTE:-git@github.com:lhzwb2008/knx-sales-outreach.git}"
-BACKUP_BRANCH="${BACKUP_BRANCH:-main}"
+BACKUP_ROOT="${BACKUP_ROOT:-/var/backups/knx-outreach}"
+KEEP_COUNT="${KEEP_COUNT:-48}"
 LOCK_FILE="${LOCK_FILE:-/var/lock/knx-outreach-backup.lock}"
 
 log() { printf '[knx-backup] %s\n' "$*"; }
@@ -28,32 +26,17 @@ if [[ ! -d "$SOURCE_DATA" ]]; then
   exit 1
 fi
 
-export GIT_SSH_COMMAND="${GIT_SSH_COMMAND:-ssh -o BatchMode=yes -o StrictHostKeyChecking=accept-new}"
+stamp="$(date '+%Y%m%d-%H%M%S')"
+dest="${BACKUP_ROOT}/${stamp}"
+mkdir -p "$dest"
 
-ensure_repo() {
-  if [[ ! -d "$BACKUP_DIR/.git" ]]; then
-    log "首次克隆备份仓库 → $BACKUP_DIR"
-    rm -rf "$BACKUP_DIR"
-    git clone --branch "$BACKUP_BRANCH" --single-branch "$BACKUP_REMOTE" "$BACKUP_DIR"
-  fi
-  cd "$BACKUP_DIR"
-  git remote set-url origin "$BACKUP_REMOTE"
-  git fetch origin "$BACKUP_BRANCH"
-  git checkout -B "$BACKUP_BRANCH" "origin/$BACKUP_BRANCH"
-  git reset --hard "origin/$BACKUP_BRANCH"
-}
+rsync -a --delete \
+  --include='*/' \
+  --include='*.json' \
+  --exclude='*' \
+  "$SOURCE_DATA/" "$dest/"
 
-sync_data() {
-  mkdir -p "$BACKUP_DIR/data"
-  # 只同步 JSON，跳过 .seeded / 临时文件
-  rsync -a --delete \
-    --include='*/' \
-    --include='*.json' \
-    --exclude='*' \
-    "$SOURCE_DATA/" "$BACKUP_DIR/data/"
-
-  # 备份元信息（便于排查，非业务数据）
-  python3 - <<'PY' "$SOURCE_DATA" "$BACKUP_DIR/data/_backup_meta.json"
+python3 - <<'PY' "$SOURCE_DATA" "$dest/_backup_meta.json"
 import json, sys, os
 from datetime import datetime, timezone
 src, out = sys.argv[1], sys.argv[2]
@@ -61,38 +44,23 @@ files = sorted(f for f in os.listdir(src) if f.endswith(".json"))
 meta = {
     "backed_up_at": datetime.now(timezone.utc).astimezone().isoformat(timespec="seconds"),
     "source": src,
-    "files": {
-        f: os.path.getsize(os.path.join(src, f)) for f in files
-    },
+    "files": {f: os.path.getsize(os.path.join(src, f)) for f in files},
 }
 with open(out, "w", encoding="utf-8") as fh:
     json.dump(meta, fh, ensure_ascii=False, indent=2)
     fh.write("\n")
 PY
-}
 
-commit_and_push() {
-  cd "$BACKUP_DIR"
-  # data/ 在 .gitignore 中，强制纳入 JSON 备份
-  git add -f data/*.json data/_backup_meta.json 2>/dev/null || git add -f data/
-  if git diff --cached --quiet; then
-    log "数据无变更，跳过提交"
-    return 0
-  fi
-  local stamp
-  stamp="$(date '+%Y-%m-%d %H:%M:%S %z')"
-  git -c user.name="knx-backup" -c user.email="backup@knx-outreach.local" \
-    commit -m "backup: ${stamp}"
-  # 若期间有代码推送，rebase 后再推，避免覆盖 main
-  if ! git push origin "HEAD:$BACKUP_BRANCH"; then
-    log "push 失败，尝试 rebase 后重试"
-    git pull --rebase origin "$BACKUP_BRANCH"
-    git push origin "HEAD:$BACKUP_BRANCH"
-  fi
-  log "已推送到 origin/$BACKUP_BRANCH（仓库根目录 data/*.json）"
-}
+ln -sfn "$dest" "${BACKUP_ROOT}/latest"
 
-ensure_repo
-sync_data
-commit_and_push
+# 只保留最近 KEEP_COUNT 份带时间戳的目录
+mapfile -t snaps < <(find "$BACKUP_ROOT" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | sort -r)
+if ((${#snaps[@]} > KEEP_COUNT)); then
+  for old in "${snaps[@]:KEEP_COUNT}"; do
+    rm -rf "${BACKUP_ROOT}/${old}"
+    log "已清理旧快照: $old"
+  done
+fi
+
+log "已备份到 $dest（latest → 该目录；保留最近 ${KEEP_COUNT} 份）"
 log "完成"

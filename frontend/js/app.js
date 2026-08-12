@@ -813,6 +813,38 @@ function bindEvents() {
   $("#helpModal").onclick = (e) => {
     if (e.target.id === "helpModal") $("#helpModal").classList.add("hidden");
   };
+  $("#btnExportData").onclick = async () => {
+    const btn = $("#btnExportData");
+    try {
+      showLoading("正在打包数据…", btn);
+      const res = await fetch("/api/export/data.zip");
+      if (!res.ok) {
+        let msg = `导出失败（${res.status}）`;
+        try {
+          const body = await res.json();
+          if (body.detail) msg = typeof body.detail === "string" ? body.detail : msg;
+        } catch (_) {}
+        throw new Error(msg);
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const m = /filename="?([^"]+)"?/i.exec(cd);
+      const filename = m ? m[1] : `knx-data-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.zip`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      toast("数据已导出");
+    } catch (e) {
+      toast(e.message || "导出失败");
+    } finally {
+      hideLoading();
+    }
+  };
 
   bindUpload();
 

@@ -98,10 +98,11 @@ fi
 fuser -k ${PORT}/tcp 2>/dev/null || true
 sleep 1
 
-# 独立数据备份：timer 与主服务解耦，直接把 data/*.json 推到 GitHub main 仓库根目录
+# 本地数据备份：timer 与主服务解耦，仅备份到服务器 /var/backups/knx-outreach（不推 Git）
 chmod +x ${REMOTE_DIR}/scripts/backup_data.sh
 install -m 0644 ${REMOTE_DIR}/scripts/systemd/knx-outreach-backup.service /etc/systemd/system/knx-outreach-backup.service
 install -m 0644 ${REMOTE_DIR}/scripts/systemd/knx-outreach-backup.timer /etc/systemd/system/knx-outreach-backup.timer
+mkdir -p /var/backups/knx-outreach
 
 # 免费 HTTPS（Caddy + sslip.io，自动申请证书；不改动已有其它站点块）
 if ! command -v caddy >/dev/null 2>&1; then
@@ -160,5 +161,5 @@ curl -sf --max-time 25 https://${HTTPS_HOST}/api/health || echo "(HTTPS 若失�
 echo
 echo "服务地址: https://${HTTPS_HOST}/"
 echo "HTTP 直连: http://${HOST}:${PORT}/"
-echo "数据备份: GitHub main 仓库 data/*.json（timer 每小时；开机约 3 分钟后也会跑）"
+echo "数据备份: 服务器 /var/backups/knx-outreach（timer 每小时；网站可「导出数据」下载 zip）"
 EOF
