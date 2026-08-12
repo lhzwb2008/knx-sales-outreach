@@ -140,23 +140,14 @@ function switchView(name) {
 }
 
 async function loadAll() {
-  const [leads, scripts, competitors, outreach, wechatTodos, health] = await Promise.all([
+  const [leads, scripts, competitors, outreach, wechatTodos] = await Promise.all([
     api("/api/leads"),
     api("/api/scripts"),
     api("/api/competitors"),
     api("/api/outreach"),
     api("/api/wechat-todos"),
-    api("/api/health"),
   ]);
   Object.assign(state, { leads, scripts, competitors, outreach, wechatTodos });
-  const badge = $("#readyBadge");
-  if (health.assistant_ready) {
-    badge.textContent = "智能助手已就绪";
-    badge.className = "badge ok";
-  } else {
-    badge.textContent = "智能助手未配置";
-    badge.className = "badge warn";
-  }
 }
 
 // 数字滚动动效
