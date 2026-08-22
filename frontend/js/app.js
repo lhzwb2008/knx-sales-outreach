@@ -10,7 +10,14 @@ const state = {
   analyzePage: 1,
 };
 
-const MATERIAL_OPTIONS = ["案例资料", "白皮书", "近期市场活动介绍", "大师课"];
+const MATERIAL_OPTIONS = [
+  "案例资料",
+  "白皮书",
+  "近期市场活动介绍",
+  "大师课",
+  "出海用工合规避坑手册",
+  "海外组织成熟度诊断清单",
+];
 const ANALYZE_PAGE_SIZE = 10;
 
 const $ = (s) => document.querySelector(s);
@@ -570,6 +577,20 @@ function renderLeadModalContent(lead, extra = {}) {
           : `<p class="muted">暂无探询问题</p>`
       }
     </div>
+    ${
+      Array.isArray(lead.script_objections) && lead.script_objections.length
+        ? `<div class="script-highlight soft">
+      <div class="sh-label">常见异议应对</div>
+      <ul class="sh-questions">${lead.script_objections
+        .map(
+          (o) =>
+            `<li><strong>${esc(o.trigger || "")}</strong><br/>${esc(o.response || "")}</li>`
+        )
+        .join("")}</ul>
+      ${lead.hook_asset ? `<p class="muted" style="margin-top:0.5rem">建议资料：${esc(lead.hook_asset)}</p>` : ""}
+    </div>`
+        : ""
+    }
   `;
 
   $("#leadAnalysisBox").innerHTML = `

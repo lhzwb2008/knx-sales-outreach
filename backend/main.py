@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, engine, excel_import, image_gen, llm, storage
+from . import config, engine, excel_import, image_gen, llm, overseas, storage
 from .seed_data import reset_and_seed, seed_all
 
 app = FastAPI(title="肯耐珂萨销售陌拜工作台", version="2.0.0")
@@ -27,9 +27,9 @@ app.add_middleware(
 def _startup() -> None:
     storage.ensure_data_dir()
     seed_all()
+    overseas.ensure_catalog()
     if not storage.list_items("wechat_todos") and not (config.DATA_DIR / "wechat_todos.json").exists():
         storage.write_collection("wechat_todos", [])
-    # 帮助图可异步缺失，首次打开帮助时再生成
     config.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -405,6 +405,7 @@ def ai_analyze_need(body: AIAnalyzeIn) -> dict:
         raise HTTPException(404, str(e)) from e
 
     products_catalog = storage.list_items("products")
+    overseas_hit = overseas.is_overseas_context(lead, result.get("rule_hits") or [])
     system = (
         "你是肯耐珂萨销售需求分析助手。根据线索与规则命中结果，输出面向销售可读的 JSON："
         "{need_analysis: string(2-4句中文，说清客户可能的HR需求与判断依据),"
@@ -414,14 +415,21 @@ def ai_analyze_need(body: AIAnalyzeIn) -> dict:
         " phone_opener: string(30秒首通开场，代表肯耐珂萨，不硬推销),"
         " wechat_invite: string,"
         " questions: string[]}。"
-        "语气务实，不要提模型或技术实现。"
+        "语气务实、口语短句，不要提模型或技术实现。"
+        "推荐产品必须保留规则命中里的各项，可以同时推荐多个，不要用一个产品覆盖掉另一个。"
+        "若涉及出海/海外用工，必须同时包含「出海人力咨询」，并与其他命中产品并列。"
+        "出海话术可使用：覆盖 160+ 国家/地区、EOR 最快 3-5 天合规上岗、试错成本约为自建实体的十分之一。"
+        "禁止出现：双循环、OLI、赋能、抓手、闭环、数字化转型、生态、方法论、顶层设计、战略协同。"
+        "探询问题用开放式（不要只回答是或否）。补充信息很少时用试探句式，不要武断断言客户已经在出海。"
+        "首通不要要求签约、报价或见高层。"
     )
     user = (
         f"线索：{lead}\n人工补充：{body.supplement or lead.get('manual_supplement') or ''}\n"
         f"规则命中：{result.get('rule_hits', [])[:5]}\n"
         f"市场方案：{result.get('competitor_hits', [])}\n"
         f"优先级：{result.get('priority')}\n"
-        f"可推荐产品目录：{[p.get('name') for p in products_catalog]}\n请输出 JSON。"
+        f"可推荐产品目录：{[p.get('name') for p in products_catalog]}\n"
+        f"是否出海相关：{overseas_hit}\n请输出 JSON。"
     )
     try:
         insights = llm.chat_json(system=system, user=user, temperature=0.3, max_tokens=1800)
@@ -440,15 +448,31 @@ def ai_analyze_need(body: AIAnalyzeIn) -> dict:
             "wechat_invite": "方便加微信吗？我把同行业轻量案例发您先看。",
             "questions": ["目前最紧迫的是系统、组织还是干部能力？"],
         }
+        if overseas_hit:
+            tpl = storage.get_item("scripts", "T012") or overseas.SCRIPTS[0]
+            insights["phone_opener"] = tpl.get("body") or insights["phone_opener"]
+            insights["wechat_invite"] = tpl.get("wechat") or insights["wechat_invite"]
+            insights["questions"] = list(overseas.DEFAULT_QUESTIONS)
+            insights["recommended_products"] = overseas.merge_products(
+                insights["recommended_products"], overseas.PRODUCT["name"]
+            )
+            insights["talk_angle"] = "先确认海外是当地雇人还是派人出去，以及总部能不能看清发薪。"
 
     lead = _lead_or_404(body.lead_id)
     lead["need_analysis"] = str(insights.get("need_analysis") or "").strip()
-    lead["recommended_products"] = str(insights.get("recommended_products") or "").strip()
+    lead["recommended_products"] = overseas.merge_products(
+        str(insights.get("recommended_products") or "").strip(),
+        overseas.PRODUCT["name"] if overseas.is_overseas_context(lead, result.get("rule_hits") or [], insights) else "",
+    )
     lead["priority_reason"] = str(insights.get("priority_reason") or "").strip()
     lead["talk_angle"] = str(insights.get("talk_angle") or "").strip()
     lead["phone_opener"] = str(insights.get("phone_opener") or "").strip()
     lead["wechat_invite"] = str(insights.get("wechat_invite") or "").strip()
     lead["script_questions"] = insights.get("questions") or []
+    overseas.attach_playbook(
+        lead,
+        overseas=overseas.is_overseas_context(lead, result.get("rule_hits") or [], insights),
+    )
     lead["last_analyzed_at"] = storage.now_iso()
     if body.supplement.strip():
         lead["manual_supplement"] = body.supplement.strip()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import storage
+from . import overseas, storage
 from .config import DATA_DIR
 
 
@@ -82,6 +82,7 @@ def seed_all(force: bool = False) -> dict:
             "category": "绩效",
             "desc": "OKR/KPI 体系重构、绩效面谈与校准机制",
         },
+        {k: v for k, v in overseas.PRODUCT.items()},
     ]
 
     competitors = [
@@ -317,6 +318,7 @@ def seed_all(force: bool = False) -> dict:
             "wechat": "加个微信，我发对比表（轻量工具 vs 专业薪酬）给您内部讨论。",
             "version": "B",
         },
+        *[dict(s) for s in overseas.SCRIPTS],
     ]
 
     rules = [
@@ -701,21 +703,22 @@ def seed_all(force: bool = False) -> dict:
         {
             "id": "R022",
             "signal_type": "企业新闻",
-            "signal_keywords": "出海/海外分公司/国际化/新加坡主体",
+            "signal_keywords": overseas.R022_PATCH["signal_keywords"],
             "signal_strength": 3,
-            "need": "多地雇佣合规与统一人事",
-            "products": "HR一体化 SaaS、咨询",
-            "confidence": 62,
-            "extra_condition": "多国发薪则置信度+15",
-            "exception": "仅贸易出口无本地雇佣",
-            "script_id": "T004",
+            "need": overseas.R022_PATCH["need"],
+            "products": overseas.R022_PATCH["products"],
+            "confidence": overseas.R022_PATCH["confidence"],
+            "extra_condition": overseas.R022_PATCH["extra_condition"],
+            "exception": overseas.R022_PATCH["exception"],
+            "script_id": overseas.R022_PATCH["script_id"],
             "author": "系统初版",
-            "validation_status": "未验证",
+            "validation_status": overseas.R022_PATCH["validation_status"],
             "hit_count": 0,
             "deal_count": 0,
             "accuracy": 0,
             "enabled": True,
         },
+        *[dict(r) for r in overseas.RULES],
     ]
 
     now = storage.now_iso()
