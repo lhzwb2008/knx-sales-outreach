@@ -887,6 +887,102 @@ function bindUpload() {
   };
 }
 
+const importConflictState = {
+  queue: [],
+  index: 0,
+  imported: 0,
+  overwritten: 0,
+  skipped: 0,
+  mapping: "",
+};
+
+function conflictFieldRows(existing, incoming) {
+  const fields = [
+    ["公司", "company"],
+    ["联系人", "name"],
+    ["电话", "phone"],
+    ["职位", "title"],
+    ["行业", "industry"],
+    ["备注", "notes"],
+  ];
+  const left = fields
+    .map(([label, key]) => {
+      const oldVal = existing[key] || "—";
+      return `<dt>${esc(label)}</dt><dd>${esc(oldVal)}</dd>`;
+    })
+    .join("");
+  const right = fields
+    .map(([label, key]) => {
+      const oldVal = String(existing[key] || "");
+      const newVal = String(incoming[key] || "");
+      const changed = newVal && newVal !== oldVal;
+      return `<dt>${esc(label)}</dt><dd class="${changed ? "changed" : ""}">${esc(newVal || "—")}</dd>`;
+    })
+    .join("");
+  return { left, right };
+}
+
+function renderImportConflict() {
+  const modal = $("#importConflictModal");
+  const total = importConflictState.queue.length;
+  if (!modal || importConflictState.index >= total) {
+    closeImportConflict();
+    finishImportResult();
+    return;
+  }
+  const item = importConflictState.queue[importConflictState.index];
+  const existing = item.existing || {};
+  const incoming = item.incoming || {};
+  $("#importConflictTitle").textContent = `发现重复手机号 ${item.phone || existing.phone || ""}`;
+  $("#importConflictProgress").textContent = `${importConflictState.index + 1} / ${total}`;
+  const { left, right } = conflictFieldRows(existing, incoming);
+  $("#importConflictCompare").innerHTML = `
+    <div class="conflict-pane">
+      <h3>已有客户</h3>
+      <dl>${left}</dl>
+      ${existing.status ? `<p class="muted">当前状态：${esc(existing.status)}${existing.last_tier ? ` · ${esc(existing.last_tier)}` : ""}</p>` : ""}
+    </div>
+    <div class="conflict-pane incoming">
+      <h3>本次导入</h3>
+      <dl>${right}</dl>
+    </div>`;
+  modal.classList.remove("hidden");
+}
+
+function closeImportConflict() {
+  $("#importConflictModal")?.classList.add("hidden");
+}
+
+function finishImportResult() {
+  closeImportConflict();
+  const { imported, overwritten, skipped, mapping } = importConflictState;
+  $("#importResult").classList.remove("hidden");
+  $("#importResult").innerHTML = `<div class="block" style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:0.85rem;margin-top:1rem">
+      <strong>导入完成：新增 ${imported} 条，覆盖 ${overwritten} 条，跳过 ${skipped} 条</strong>
+      <div class="muted">${esc(mapping || "")}</div>
+      <div class="row-actions"><button class="btn" id="btnAfterImport" type="button">去客户触达</button></div>
+    </div>`;
+  $("#btnAfterImport").onclick = () => switchView("analyze");
+  toast(`导入完成：新增 ${imported}，覆盖 ${overwritten}，跳过 ${skipped}`);
+}
+
+async function overwriteImportItems(items) {
+  if (!items.length) return;
+  await api("/api/import/overwrite", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      items: items.map((item) => ({
+        existing_id: item.existing.id,
+        incoming: item.incoming,
+      })),
+    }),
+  });
+  importConflictState.overwritten += items.length;
+  state.leads = await api("/api/leads");
+  renderImportLeads();
+}
+
 async function handleExcel(file) {
   const fd = new FormData();
   fd.append("file", file);
@@ -899,16 +995,24 @@ async function handleExcel(file) {
     });
     state.leads = await api("/api/leads");
     renderImportLeads();
-    $("#importResult").classList.remove("hidden");
-    $("#importResult").innerHTML = `<div class="block" style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:0.85rem;margin-top:1rem">
-      <strong>已导入 ${res.imported} 条客户</strong>
-      <div class="muted">${esc(res.mapping_notes || "")}</div>
-      <div class="row-actions"><button class="btn" id="btnAfterImport" type="button">去需求分析</button></div>
-    </div>`;
-    $("#btnAfterImport").onclick = () => switchView("analyze");
-    toast(`导入完成：${res.imported} 条`);
+    const conflicts = res.conflicts || [];
+    importConflictState.imported = res.imported || 0;
+    importConflictState.overwritten = 0;
+    importConflictState.skipped = 0;
+    importConflictState.mapping = res.mapping_notes || "";
+    if (conflicts.length) {
+      importConflictState.queue = conflicts;
+      importConflictState.index = 0;
+      renderImportConflict();
+      toast(`已导入 ${res.imported} 条新客户，另有 ${conflicts.length} 条手机号重复，请确认是否覆盖`);
+    } else {
+      finishImportResult();
+    }
   } catch (e) {
     toast(e.message);
+  } finally {
+    const input = $("#excelFile");
+    if (input) input.value = "";
   }
 }
 
@@ -920,6 +1024,33 @@ function bindEvents() {
   $("#helpClose").onclick = () => $("#helpModal").classList.add("hidden");
   $("#helpModal").onclick = (e) => {
     if (e.target.id === "helpModal") $("#helpModal").classList.add("hidden");
+  };
+  $("#btnConflictSkip").onclick = () => {
+    importConflictState.skipped += 1;
+    importConflictState.index += 1;
+    renderImportConflict();
+  };
+  $("#btnConflictOverwrite").onclick = async () => {
+    const item = importConflictState.queue[importConflictState.index];
+    if (!item) return;
+    try {
+      await withLoading("正在覆盖…", () => overwriteImportItems([item]), $("#btnConflictOverwrite"));
+      importConflictState.index += 1;
+      renderImportConflict();
+    } catch (e) {
+      toast(e.message || "覆盖失败");
+    }
+  };
+  $("#btnConflictOverwriteAll").onclick = async () => {
+    const rest = importConflictState.queue.slice(importConflictState.index);
+    if (!rest.length) return;
+    try {
+      await withLoading(`正在覆盖剩余 ${rest.length} 条…`, () => overwriteImportItems(rest), $("#btnConflictOverwriteAll"));
+      importConflictState.index = importConflictState.queue.length;
+      renderImportConflict();
+    } catch (e) {
+      toast(e.message || "全部覆盖失败");
+    }
   };
   $("#btnExportData").onclick = async () => {
     const btn = $("#btnExportData");

@@ -773,6 +773,51 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent);
   border-color: rgba(180, 35, 24, 0.45);
 }
 
+.conflict-modal { width: min(760px, 100%); }
+.conflict-compare {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  margin: 0.4rem 0 0.2rem;
+}
+.conflict-pane {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 0.85rem 0.95rem;
+  background: #f7fafc;
+}
+.conflict-pane.incoming {
+  background: #f3fbfd;
+  border-color: rgba(0, 168, 216, 0.28);
+}
+.conflict-pane h3 {
+  margin: 0 0 0.55rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+.conflict-pane dl { margin: 0; display: grid; gap: 0.35rem; }
+.conflict-pane dt {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+.conflict-pane dd {
+  margin: 0 0 0.35rem;
+  color: var(--ink-strong);
+  font-size: 0.92rem;
+  word-break: break-all;
+}
+.conflict-pane dd.changed { color: var(--accent-deep); font-weight: 600; }
+.conflict-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.8rem;
+  margin-top: 1rem;
+  flex-wrap: wrap;
+}
+.conflict-actions-left { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+
 .help-steps { margin: 0 0 1rem; padding-left: 1.2rem; line-height: 1.6; }
 .help-image-wrap {
   background: linear-gradient(180deg, #eef3f8 0%, #e8eef6 100%);
@@ -783,7 +828,7 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent);
 }
 .help-image { width: 100%; height: auto; display: block; border-radius: 10px; }
 
-.loading-modal { background: rgba(8, 14, 28, 0.6); }
+.loading-modal { background: rgba(8, 14, 28, 0.6); z-index: 100; }
 .loading-card {
   background: #fff;
   border-radius: 16px;
@@ -816,7 +861,7 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent);
 @media (max-width: 960px) {
   .shell { grid-template-columns: 1fr; }
   .sidebar { position: static; height: auto; }
-  .stat-grid, .home-grid, .form-grid, .script-grid, .analyze-card { grid-template-columns: 1fr; }
+  .stat-grid, .home-grid, .form-grid, .script-grid, .analyze-card, .conflict-compare { grid-template-columns: 1fr; }
   .main { padding: 1.3rem 1.1rem 2.5rem; }
   .page-head { flex-direction: column; align-items: flex-start; }
 }

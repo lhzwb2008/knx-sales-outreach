@@ -47,6 +47,26 @@ class LeadIn(BaseModel):
     owner: str = ""
 
 
+class ImportIncomingLead(BaseModel):
+    name: str = "客户"
+    phone: str = ""
+    company: str
+    title: str = ""
+    industry: str = ""
+    company_size: str = ""
+    source: str = "Excel导入"
+    notes: str = ""
+
+
+class ImportOverwriteItem(BaseModel):
+    existing_id: str
+    incoming: ImportIncomingLead
+
+
+class ImportOverwriteIn(BaseModel):
+    items: list[ImportOverwriteItem]
+
+
 class ProfileIn(BaseModel):
     lead_id: str
     company: str = ""
@@ -284,6 +304,22 @@ async def import_excel(file: UploadFile = File(...)) -> dict:
     except Exception as e:
         raise HTTPException(400, f"无法读取 Excel：{e}") from e
     return result
+
+
+@app.post("/api/import/overwrite")
+def import_overwrite(body: ImportOverwriteIn) -> dict:
+    updated: list[dict] = []
+    errors: list[str] = []
+    for item in body.items:
+        try:
+            updated.append(
+                excel_import.apply_overwrite(item.existing_id, item.incoming.model_dump())
+            )
+        except ValueError as e:
+            errors.append(f"{item.existing_id}: {e}")
+    if errors and not updated:
+        raise HTTPException(400, "；".join(errors))
+    return {"ok": True, "overwritten": len(updated), "errors": errors, "leads": updated}
 
 
 @app.get("/api/leads")
