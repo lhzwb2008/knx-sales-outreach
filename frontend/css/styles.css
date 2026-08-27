@@ -733,6 +733,21 @@ input[type="checkbox"] { width: 17px; height: 17px; accent-color: var(--accent);
   font-size: 0.95rem;
   color: var(--ink);
 }
+.sh-questions li { margin-bottom: 0.55rem; }
+.sh-questions li:last-child { margin-bottom: 0; }
+.sh-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+.sh-followup-trigger {
+  display: block;
+  font-size: 0.82rem;
+  color: var(--accent-deep);
+  font-weight: 650;
+  margin-bottom: 0.12rem;
+}
 .pill.called {
   background: rgba(46, 125, 50, 0.12);
   color: #1b5e20;

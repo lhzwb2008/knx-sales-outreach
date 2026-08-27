@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, engine, excel_import, image_gen, llm, overseas, storage
+from . import config, engine, excel_import, image_gen, llm, overseas, scripting, storage
 from .seed_data import reset_and_seed, seed_all
 
 app = FastAPI(title="肯耐珂萨销售陌拜工作台", version="2.0.0")
@@ -406,22 +406,20 @@ def ai_analyze_need(body: AIAnalyzeIn) -> dict:
 
     products_catalog = storage.list_items("products")
     overseas_hit = overseas.is_overseas_context(lead, result.get("rule_hits") or [])
+    plan = scripting.plan_talk(
+        lead,
+        result.get("rule_hits") or [],
+        result.get("competitor_hits") or [],
+        str(lead.get("recommended_products") or ""),
+    )
     system = (
-        "你是肯耐珂萨销售需求分析助手。根据线索与规则命中结果，输出面向销售可读的 JSON："
-        "{need_analysis: string(2-4句中文，说清客户可能的HR需求与判断依据),"
-        " recommended_products: string(推荐的产品/服务，用顿号或逗号分隔),"
-        " priority_reason: string(为何值得现在打),"
-        " talk_angle: string(一句话切入角度),"
-        " phone_opener: string(30秒首通开场，代表肯耐珂萨，不硬推销),"
-        " wechat_invite: string,"
-        " questions: string[]}。"
+        "你是肯耐珂萨销售需求分析助手。根据线索、规则命中与已推演的需求优先级，"
+        f"输出面向销售可读的 JSON：{scripting.INSIGHT_JSON_HINT}。"
         "语气务实、口语短句，不要提模型或技术实现。"
         "推荐产品必须保留规则命中里的各项，可以同时推荐多个，不要用一个产品覆盖掉另一个。"
         "若涉及出海/海外用工，必须同时包含「出海人力咨询」，并与其他命中产品并列。"
         "出海话术可使用：覆盖 160+ 国家/地区、EOR 最快 3-5 天合规上岗、试错成本约为自建实体的十分之一。"
-        "禁止出现：双循环、OLI、赋能、抓手、闭环、数字化转型、生态、方法论、顶层设计、战略协同。"
-        "探询问题用开放式（不要只回答是或否）。补充信息很少时用试探句式，不要武断断言客户已经在出海。"
-        "首通不要要求签约、报价或见高层。"
+        f"{scripting.SCRIPT_RULES}"
     )
     user = (
         f"线索：{lead}\n人工补充：{body.supplement or lead.get('manual_supplement') or ''}\n"
@@ -429,34 +427,21 @@ def ai_analyze_need(body: AIAnalyzeIn) -> dict:
         f"市场方案：{result.get('competitor_hits', [])}\n"
         f"优先级：{result.get('priority')}\n"
         f"可推荐产品目录：{[p.get('name') for p in products_catalog]}\n"
-        f"是否出海相关：{overseas_hit}\n请输出 JSON。"
+        f"是否出海相关：{overseas_hit}\n"
+        f"{scripting.facts_block(lead, plan)}\n请输出 JSON。"
     )
     try:
-        insights = llm.chat_json(system=system, user=user, temperature=0.3, max_tokens=1800)
-    except llm.LLMError as e:
-        # 模型不可用时降级为规则汇总
-        hits = result.get("rule_hits") or []
-        insights = {
-            "need_analysis": "；".join(h.get("need", "") for h in hits[:3]) or "信息不足，建议补充招聘/新闻后再分析",
-            "recommended_products": "、".join(
-                dict.fromkeys(x for h in hits[:3] for x in str(h.get("products") or "").replace("，", "、").split("、") if x)
-            )
-            or "待定",
-            "priority_reason": (result.get("priority") or {}).get("tier", ""),
-            "talk_angle": "先确认对方当前最紧迫的人事管理问题",
-            "phone_opener": "您好，我是肯耐珂萨，想跟您确认下贵司目前在组织与人才管理上最想先解决的是哪一块。",
-            "wechat_invite": "方便加微信吗？我把同行业轻量案例发您先看。",
-            "questions": ["目前最紧迫的是系统、组织还是干部能力？"],
-        }
+        insights = llm.chat_json(system=system, user=user, temperature=0.3, max_tokens=2200)
+    except llm.LLMError:
+        insights = scripting.fallback_insights(lead, plan, result.get("rule_hits") or [])
         if overseas_hit:
             tpl = storage.get_item("scripts", "T012") or overseas.SCRIPTS[0]
             insights["phone_opener"] = tpl.get("body") or insights["phone_opener"]
             insights["wechat_invite"] = tpl.get("wechat") or insights["wechat_invite"]
-            insights["questions"] = list(overseas.DEFAULT_QUESTIONS)
             insights["recommended_products"] = overseas.merge_products(
                 insights["recommended_products"], overseas.PRODUCT["name"]
             )
-            insights["talk_angle"] = "先确认海外是当地雇人还是派人出去，以及总部能不能看清发薪。"
+            insights["talk_angle"] = "先确认海外是当地雇人还是派人出去；被拒后切派出/当地负责人能不能带住团队。"
 
     lead = _lead_or_404(body.lead_id)
     lead["need_analysis"] = str(insights.get("need_analysis") or "").strip()
@@ -466,9 +451,7 @@ def ai_analyze_need(body: AIAnalyzeIn) -> dict:
     )
     lead["priority_reason"] = str(insights.get("priority_reason") or "").strip()
     lead["talk_angle"] = str(insights.get("talk_angle") or "").strip()
-    lead["phone_opener"] = str(insights.get("phone_opener") or "").strip()
-    lead["wechat_invite"] = str(insights.get("wechat_invite") or "").strip()
-    lead["script_questions"] = insights.get("questions") or []
+    scripting.apply_to_lead(lead, insights, plan)
     overseas.attach_playbook(
         lead,
         overseas=overseas.is_overseas_context(lead, result.get("rule_hits") or [], insights),
@@ -741,22 +724,36 @@ def ai_generate_script(body: AIScriptIn) -> dict:
         analysis = engine.analyze_lead(body.lead_id)
     except Exception:
         analysis = None
+    plan = scripting.plan_talk(
+        lead,
+        (analysis or {}).get("rule_hits") or [],
+        (analysis or {}).get("competitor_hits") or [],
+        str(lead.get("recommended_products") or ""),
+    )
     system = (
-        "你是肯耐珂萨电话销售教练。生成首通开场白：代表肯耐珂萨，不硬推销，"
-        "只做需求确认+建立信任；30秒内说完；口语化中文。"
-        "输出 JSON：phone_opener, wechat_invite, questions(array), taboo(array), signal_used。"
+        "你是肯耐珂萨电话销售教练。代表肯耐珂萨，不硬推销，只做需求确认+建立信任。"
+        "输出 JSON：phone_opener, wechat_invite, rejection_followups([{trigger, say}]), "
+        "taboo(array), signal_used。"
+        f"{scripting.SCRIPT_RULES}"
     )
     user = (
         f"线索：{lead}\n信号：{body.signal}\n语气：{body.tone}\n"
         f"命中需求：{(analysis or {}).get('rule_hits', [])[:3]}\n"
-        f"市场方案：{(analysis or {}).get('competitor_hits', [])}\n请输出 JSON。"
+        f"市场方案：{(analysis or {}).get('competitor_hits', [])}\n"
+        f"{scripting.facts_block(lead, plan)}\n请输出 JSON。"
     )
     try:
-        data = llm.chat_json(system=system, user=user, temperature=0.5, max_tokens=1500)
+        data = llm.chat_json(system=system, user=user, temperature=0.5, max_tokens=1800)
     except llm.LLMError as e:
         raise HTTPException(502, "话术生成暂时不可用，请稍后重试") from e
+    scripting.apply_to_lead(lead, data, plan)
+    storage.upsert_item("leads", lead)
     _set_step(lead, 3, "待触达")
-    # 可选落库一条临时话术
+    data["phone_opener"] = lead.get("phone_opener")
+    data["wechat_invite"] = lead.get("wechat_invite")
+    data["rejection_followups"] = lead.get("script_followups")
+    data["questions"] = lead.get("script_questions")
+    data["second_need"] = lead.get("second_need")
     return data
 
 

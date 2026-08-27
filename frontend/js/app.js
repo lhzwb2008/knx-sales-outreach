@@ -93,6 +93,26 @@ function esc(s) {
     .replaceAll('"', "&quot;");
 }
 
+function followupItems(lead) {
+  const rich = Array.isArray(lead.script_followups) ? lead.script_followups : [];
+  if (rich.length) {
+    return rich.map((x) => ({
+      trigger: x.trigger || x.when || "",
+      say: x.say || x.response || x.text || "",
+    }));
+  }
+  const qs = Array.isArray(lead.script_questions) ? lead.script_questions : [];
+  return qs.map((q) => {
+    if (q && typeof q === "object") {
+      return { trigger: q.trigger || q.when || "", say: q.say || q.response || "" };
+    }
+    const s = String(q || "");
+    const boxed = s.match(/^【([^】]+)】(.*)$/s);
+    if (boxed) return { trigger: boxed[1].trim(), say: boxed[2].trim() };
+    return { trigger: "", say: s };
+  });
+}
+
 function tierClass(tier = "") {
   if (String(tier).includes("P0")) return "p0";
   if (String(tier).includes("P1")) return "p1";
@@ -559,7 +579,7 @@ function renderLeadModalContent(lead, extra = {}) {
 
   const opener = lead.phone_opener || "暂无预生成开场白，可先补充信息后重新分析。";
   const wechat = lead.wechat_invite || "方便加一下微信吗？我把同行业案例发您看一下。";
-  const qs = Array.isArray(lead.script_questions) ? lead.script_questions : [];
+  const followups = followupItems(lead);
   $("#leadScriptBox").innerHTML = `
     <div class="script-highlight">
       <div class="sh-label">电话开场白</div>
@@ -570,11 +590,25 @@ function renderLeadModalContent(lead, extra = {}) {
       <p class="sh-body">${esc(wechat)}</p>
     </div>
     <div class="script-highlight soft">
-      <div class="sh-label">探询问题</div>
+      <div class="sh-label">被拒绝后跟进</div>
       ${
-        qs.length
-          ? `<ol class="sh-questions">${qs.map((q) => `<li>${esc(q)}</li>`).join("")}</ol>`
-          : `<p class="muted">暂无探询问题</p>`
+        lead.second_need
+          ? `<p class="sh-hint">第一优先被挡后，切到：${esc(lead.second_need)}</p>`
+          : `<p class="sh-hint">第一优先被挡后，切第二优先需求或周旋，不要换个说法再问同一件事。</p>`
+      }
+      ${
+        followups.length
+          ? `<ol class="sh-questions">${followups
+              .map(
+                (q) =>
+                  `<li>${
+                    q.trigger
+                      ? `<span class="sh-followup-trigger">${esc(q.trigger)}</span>`
+                      : ""
+                  }${esc(q.say)}</li>`
+              )
+              .join("")}</ol>`
+          : `<p class="muted">暂无跟进话术</p>`
       }
     </div>
     ${
@@ -603,6 +637,13 @@ function renderLeadModalContent(lead, extra = {}) {
       <div class="tag-row">${productTags(lead.recommended_products)}</div>
     </div>
     ${lead.talk_angle ? `<div class="block"><h4>切入角度</h4><p>${esc(lead.talk_angle)}</p></div>` : ""}
+    ${
+      lead.primary_need || lead.second_need
+        ? `<div class="block"><h4>需求优先级</h4><p>第一优先：${esc(
+            lead.primary_need || "—"
+          )}<br/>被拒后切：${esc(lead.second_need || "—")}</p></div>`
+        : ""
+    }
     ${lead.priority_reason ? `<div class="block"><h4>优先原因</h4><p class="muted">${esc(lead.priority_reason)}</p></div>` : ""}
     ${
       comps.length

@@ -8,7 +8,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from backend import engine, llm, storage
+from backend import engine, llm, scripting, storage
 from backend.seed_data import seed_all
 
 
@@ -295,40 +295,33 @@ def generate_analyses_and_scripts() -> dict:
         # rule engine + AI insight
         result = engine.analyze_lead(lead["id"])
         products = [p.get("name") for p in storage.list_items("products")]
+        plan = scripting.plan_talk(
+            lead,
+            result.get("rule_hits") or [],
+            result.get("competitor_hits") or [],
+        )
         system = (
             "你是肯耐珂萨销售需求分析助手。输出 JSON："
-            "{need_analysis, recommended_products, priority_reason, talk_angle,"
-            " phone_opener, wechat_invite, questions:[] }。"
-            "phone_opener 为30秒首通开场，代表肯耐珂萨，不硬推销；中文务实。"
+            f"{scripting.INSIGHT_JSON_HINT}。"
+            f"{scripting.SCRIPT_RULES}"
         )
         user = (
             f"线索：{lead}\n规则命中：{result.get('rule_hits', [])[:4]}\n"
             f"市场方案：{result.get('competitor_hits', [])}\n优先级：{result.get('priority')}\n"
-            f"产品目录：{products}\n请输出 JSON。"
+            f"产品目录：{products}\n{scripting.facts_block(lead, plan)}\n请输出 JSON。"
         )
         try:
-            insights = llm.chat_json(system=system, user=user, temperature=0.35, max_tokens=1800)
+            insights = llm.chat_json(system=system, user=user, temperature=0.35, max_tokens=2200)
         except Exception as e:
             print("  LLM失败，用规则降级:", e)
-            hits = result.get("rule_hits") or []
-            insights = {
-                "need_analysis": "；".join(h.get("need", "") for h in hits[:3]) or "待补充",
-                "recommended_products": "、".join(h.get("products", "") for h in hits[:2]) or "综合HR解决方案",
-                "priority_reason": (result.get("priority") or {}).get("tier", ""),
-                "talk_angle": "先确认当前最紧迫的人事管理问题",
-                "phone_opener": f"您好，我是肯耐珂萨，看到贵司近期在组织与人才方面有一些动作，想跟您简单确认下目前最想先解决的是哪一块。",
-                "wechat_invite": "方便加一下微信吗？我把同行业轻量案例发您先看。",
-                "questions": ["目前最紧迫的是系统、组织还是干部能力？", "决策大概会在哪个时间窗口？"],
-            }
+            insights = scripting.fallback_insights(lead, plan, result.get("rule_hits") or [])
 
         lead = storage.get_item("leads", lead["id"])
         lead["need_analysis"] = insights.get("need_analysis", "")
         lead["recommended_products"] = insights.get("recommended_products", "")
         lead["priority_reason"] = insights.get("priority_reason", "")
         lead["talk_angle"] = insights.get("talk_angle", "")
-        lead["phone_opener"] = insights.get("phone_opener", "")
-        lead["wechat_invite"] = insights.get("wechat_invite", "")
-        lead["script_questions"] = insights.get("questions") or []
+        scripting.apply_to_lead(lead, insights, plan)
         lead["status"] = "已分析"
         lead["workflow_step"] = 3
         lead["last_score"] = (result.get("priority") or {}).get("total")
