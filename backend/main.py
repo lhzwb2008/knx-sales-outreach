@@ -5,13 +5,13 @@ import zipfile
 from datetime import datetime, timedelta
 from typing import Any
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from . import config, engine, excel_import, image_gen, llm, overseas, scripting, storage
+from . import auth, config, engine, excel_import, image_gen, llm, overseas, scripting, storage
 from .seed_data import reset_and_seed, seed_all
 
 app = FastAPI(title="肯耐珂萨销售陌拜工作台", version="2.0.0")
@@ -21,11 +21,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.middleware("http")(auth.guard)
 
 
 @app.on_event("startup")
 def _startup() -> None:
     storage.ensure_data_dir()
+    auth.ensure_users()
     seed_all()
     overseas.ensure_catalog()
     if not storage.list_items("wechat_todos") and not (config.DATA_DIR / "wechat_todos.json").exists():
@@ -186,6 +188,60 @@ def _set_step(lead: dict, step: int, status: str | None = None) -> dict:
     return storage.upsert_item("leads", lead)
 
 
+class LoginIn(BaseModel):
+    username: str
+    password: str
+
+
+def _require_admin(request: Request) -> dict:
+    user = getattr(request.state, "user", None) or auth.user_from_request(request)
+    if not user or user.get("role") != "admin":
+        raise HTTPException(403, "仅管理员可查看操作审计")
+    return user
+
+
+@app.post("/api/auth/login")
+def login(body: LoginIn, request: Request) -> JSONResponse:
+    user = auth.find_user(body.username)
+    if not user or not auth.verify_password(body.password, user.get("password_hash") or ""):
+        auth.append_audit(
+            {"username": (body.username or "").strip(), "display_name": "", "department": "", "role": ""},
+            "POST",
+            "/api/auth/login",
+            401,
+            action="登录",
+        )
+        raise HTTPException(401, "账号或密码不正确")
+    public = auth.public_user(user)
+    auth.append_audit(public, "POST", "/api/auth/login", 200, action="登录")
+    response = JSONResponse(public)
+    auth.set_session_cookie(response, auth.issue_token(public["username"]), request)
+    return response
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request) -> JSONResponse:
+    user = getattr(request.state, "user", None)
+    response = JSONResponse({"ok": True})
+    auth.clear_session_cookie(response)
+    auth.append_audit(user, "POST", "/api/auth/logout", 200, action="退出登录")
+    return response
+
+
+@app.get("/api/auth/me")
+def me(request: Request) -> dict:
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(401, "请先登录")
+    return user
+
+
+@app.get("/api/audit/stats")
+def audit_stats(request: Request, range: str = "7d") -> dict:
+    _require_admin(request)
+    return auth.audit_stats("today" if range == "today" else "7d")
+
+
 @app.get("/api/health")
 def health() -> dict:
     # 对前端只暴露业务就绪状态，不暴露模型名与实现细节
@@ -246,7 +302,7 @@ def export_data_zip() -> StreamingResponse:
             zf.write(path, arcname=f"{name}.json")
             written += 1
         for path in sorted(config.DATA_DIR.glob("*.json")):
-            if path.stem in storage.COLLECTIONS:
+            if path.stem in storage.COLLECTIONS or path.stem in {"users", "audit"}:
                 continue
             if path.name.startswith("_") or path.name.startswith("._"):
                 continue
@@ -324,7 +380,8 @@ def import_overwrite(body: ImportOverwriteIn) -> dict:
 
 @app.get("/api/leads")
 def list_leads() -> list:
-    return sorted(storage.list_items("leads"), key=lambda x: x.get("updated_at", ""), reverse=True)
+    leads = sorted(storage.list_items("leads"), key=lambda x: x.get("updated_at", ""), reverse=True)
+    return [excel_import.present_lead(lead) for lead in leads]
 
 
 @app.post("/api/leads")
@@ -332,7 +389,52 @@ def create_lead(body: LeadIn) -> dict:
     item = body.model_dump()
     item["id"] = storage.new_id("L")
     item["workflow_step"] = 1
-    return storage.upsert_item("leads", item)
+    item["contacts"] = [excel_import._contact_from_incoming(item)]
+    excel_import.sync_primary_contact(item)
+    return excel_import.present_lead(storage.upsert_item("leads", item))
+
+
+class ContactIn(BaseModel):
+    name: str = "客户"
+    phone: str = ""
+    title: str = ""
+    notes: str = ""
+
+
+@app.post("/api/leads/{lead_id}/contacts")
+def add_lead_contact(lead_id: str, body: ContactIn) -> dict:
+    lead = _lead_or_404(lead_id)
+    name = body.name.strip() or "客户"
+    phone = body.phone.strip()
+    title = body.title.strip()
+    notes = body.notes.strip()
+    if not any((name, phone, title, notes)) or (name == "客户" and not any((phone, title, notes))):
+        raise HTTPException(400, "请至少填写联系人、电话或备注")
+    phone_key = excel_import.normalize_phone(phone)
+    if phone_key:
+        for other in storage.list_items("leads"):
+            if other.get("id") == lead_id:
+                continue
+            phones = [other.get("phone") or ""]
+            phones.extend(c.get("phone") or "" for c in excel_import.contacts_of(other))
+            if any(excel_import.normalize_phone(p) == phone_key for p in phones):
+                raise HTTPException(400, "该电话已属于其他公司")
+    contacts = excel_import.contacts_of(lead)
+    for contact in contacts:
+        if phone_key and excel_import.normalize_phone(contact.get("phone") or "") == phone_key:
+            raise HTTPException(400, "该公司已有此电话")
+    contacts.append(
+        {
+            "id": storage.new_id("C"),
+            "name": name,
+            "phone": phone,
+            "title": title,
+            "notes": notes,
+        }
+    )
+    lead["contacts"] = contacts
+    excel_import.sync_primary_contact(lead)
+    return excel_import.present_lead(storage.upsert_item("leads", lead))
 
 
 @app.put("/api/leads/{lead_id}")

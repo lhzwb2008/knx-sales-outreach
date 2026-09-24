@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/styles.css?v=20260822-overseas-v1" />
+  <link rel="stylesheet" href="/css/styles.css?v=20260924-contacts-v1" />
 </head>
 <body>
   <div class="shell">
@@ -50,6 +50,10 @@
           <svg class="side-ic" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="4.2" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="12" r="1.1" fill="currentColor"/></svg>
           <span>市场方案参考</span>
         </button>
+        <button class="side-item hidden" id="navAudit" data-view="audit">
+          <svg class="side-ic" viewBox="0 0 24 24" fill="none"><path d="M7 3.5h7.2L19 8.2V20a1.5 1.5 0 0 1-1.5 1.5h-10A1.5 1.5 0 0 1 6 20V5A1.5 1.5 0 0 1 7.5 3.5H7Z" stroke="currentColor" stroke-width="1.6"/><path d="M14 3.8V8h4.2M9 12h6M9 15.5h4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <span>操作审计</span>
+        </button>
         <button class="side-item" data-view="scripts">
           <svg class="side-ic" viewBox="0 0 24 24" fill="none"><path d="M5 5.5A2.5 2.5 0 0 1 7.5 3H18a1 1 0 0 1 1 1v15.5a1 1 0 0 1-1.447.894L15 19.118l-2.553 1.276a1 1 0 0 1-.894 0L9 19.118l-2.553 1.276A1 1 0 0 1 5 19.5V5.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 8h6M9 12h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
           <span>话术库</span>
@@ -57,6 +61,10 @@
       </div>
 
       <div class="side-foot">
+        <div class="session-chip" id="sessionChip">
+          <span id="sessionName">未登录</span>
+          <button class="btn ghost small" id="btnLogout" type="button">退出</button>
+        </div>
         <button class="btn ghost small" id="btnExportData" type="button">导出数据</button>
         <button class="btn ghost small" id="btnHelp" type="button">使用帮助</button>
       </div>
@@ -119,7 +127,7 @@
               <div class="upload-inner">
                 <svg class="upload-ic" viewBox="0 0 24 24" fill="none"><path d="M12 16V6m0 0-3.2 3.2M12 6l3.2 3.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 15.8v1.7A2.5 2.5 0 0 0 6.5 20h11a2.5 2.5 0 0 0 2.5-2.5v-1.7" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
                 <strong>拖拽 Excel 到此处，或点击选择文件</strong>
-                <p class="muted">建议包含：公司、姓名/姓氏、电话、职位、备注。手机号相同会提示是否覆盖，不会重复入库。</p>
+                <p class="muted">建议包含：公司、姓名/姓氏、电话、职位、备注。同一公司可有多位联系人；手机号相同会提示是否覆盖。</p>
               </div>
             </div>
             <div id="importResult" class="hidden"></div>
@@ -262,6 +270,22 @@
           </div>
         </section>
 
+        <section id="view-audit" class="view">
+          <div class="page-head">
+            <div>
+              <h1>操作审计</h1>
+              <p>各事业部账户的登录与写操作统计。客户名单仍是共用的，这里只记录谁做了什么。</p>
+            </div>
+            <div class="row">
+              <button class="btn secondary small" id="auditRange7" type="button">近 7 日</button>
+              <button class="btn ghost small" id="auditRangeToday" type="button">今日</button>
+            </div>
+          </div>
+          <div class="panel">
+            <div id="auditTable" class="table-wrap"></div>
+          </div>
+        </section>
+
       </main>
     </div>
   </div>
@@ -301,6 +325,20 @@
       </div>
 
       <div class="lead-modal-body">
+        <section class="lead-section" id="leadContactsSection">
+          <h3>联系人</h3>
+          <div id="leadContactsBox"></div>
+          <form id="addContactForm" class="form-grid contact-form">
+            <label>联系人<input name="name" placeholder="姓或称呼" /></label>
+            <label>电话<input name="phone" placeholder="手机号" /></label>
+            <label>职位<input name="title" placeholder="可选" /></label>
+            <label>备注<input name="notes" placeholder="可选" /></label>
+            <div class="row-actions">
+              <button class="btn small" id="btnAddContact" type="submit">新增联系人</button>
+            </div>
+          </form>
+        </section>
+
         <section class="lead-section lead-scripts">
           <h3>外呼话术（边打边看）</h3>
           <div id="leadScriptBox"></div>
@@ -357,6 +395,21 @@
     </div>
   </div>
 
-  <script src="/js/app.js?v=20260822-overseas-v1"></script>
+  <div id="loginGate" class="login-gate hidden">
+    <form id="loginForm" class="login-card">
+      <div class="brand-name">KNX<span>智拓</span></div>
+      <p>请使用分配的账户登录</p>
+      <label>账号
+        <input id="loginUser" name="username" autocomplete="username" required />
+      </label>
+      <label>密码
+        <input id="loginPass" name="password" type="password" autocomplete="current-password" required />
+      </label>
+      <button class="btn" type="submit">登录</button>
+      <div id="loginError" class="login-error hidden"></div>
+    </form>
+  </div>
+
+  <script src="/js/app.js?v=20260924-contacts-v1"></script>
 </body>
 </html>

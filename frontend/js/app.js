@@ -61,7 +61,7 @@ async function withLoading(text, fn, btn = null) {
 }
 
 async function api(path, options = {}) {
-  const res = await fetch(path, options);
+  const res = await fetch(path, { ...options, credentials: "same-origin" });
   const text = await res.text();
   let data;
   try {
@@ -71,7 +71,9 @@ async function api(path, options = {}) {
   }
   if (!res.ok) {
     const msg = data.detail || data.message || res.statusText;
-    throw new Error(typeof msg === "string" ? msg : JSON.stringify(msg));
+    const text = typeof msg === "string" ? msg : JSON.stringify(msg);
+    if (res.status === 401 && path !== "/api/auth/login") showLogin();
+    throw new Error(text);
   }
   return data;
 }
@@ -166,6 +168,7 @@ function switchView(name) {
   if (name === "wechat") renderWechat();
   if (name === "competitors") renderCompetitors();
   if (name === "scripts") renderScripts();
+  if (name === "audit") loadAudit(state.auditRange || "7d");
 }
 
 async function loadAll() {
@@ -207,7 +210,7 @@ function animateBars(container) {
 function leadCard(l) {
   return `<article class="lead-card" data-lead="${esc(l.id)}">
     <span class="co">${esc(l.company)}</span>
-    <span class="who">${esc(l.name || "客户")} · ${esc(l.title || "职位未知")} · ${esc(l.phone || "无电话")}</span>
+    <span class="who">${esc(contactLine(l).names || l.name || "客户")} · ${esc(contactLine(l).title || l.title || "职位未知")} · ${esc(contactLine(l).phones || l.phone || "无电话")}</span>
     <div class="foot">
       <span class="pill ${tierClass(l.last_tier)}">${esc(l.last_tier || "未评分")}</span>
       ${l.last_score != null ? `<span class="score">${esc(l.last_score)} 分</span>` : `<span class="score">${esc(l.status || "待分析")}</span>`}
@@ -221,8 +224,30 @@ function bindLeadCards(container, onPick) {
   });
 }
 
+function leadContacts(lead) {
+  if (Array.isArray(lead?.contacts) && lead.contacts.length) return lead.contacts;
+  if (!lead) return [];
+  if (!(lead.name || lead.phone || lead.title || lead.notes)) return [];
+  return [{ id: "primary", name: lead.name || "客户", phone: lead.phone || "", title: lead.title || "", notes: lead.notes || "" }];
+}
+
+function contactLine(lead) {
+  const contacts = leadContacts(lead);
+  if (!contacts.length) return { name: lead?.name || "客户", phone: lead?.phone || "", title: lead?.title || "", extra: "" };
+  const first = contacts[0];
+  return {
+    name: first.name || "客户",
+    phone: first.phone || "",
+    title: first.title || "",
+    extra: contacts.length > 1 ? ` 等${contacts.length}人` : "",
+    phones: contacts.map((c) => c.phone).filter(Boolean).join(" / "),
+    names: contacts.map((c) => c.name).filter(Boolean).join("、"),
+  };
+}
+
 function leadLabel(l) {
-  return `${l.company} · ${l.name || "客户"}`;
+  const line = contactLine(l);
+  return `${l.company} · ${line.names || l.name || "客户"}`;
 }
 
 function tableLeadsSimple(rows) {
@@ -234,8 +259,8 @@ function tableLeadsSimple(rows) {
     .map(
       (l) => `<tr class="clickable" data-lead="${esc(l.id)}">
       <td><strong>${esc(l.company)}</strong></td>
-      <td>${esc(l.name)}</td>
-      <td>${esc(l.phone || "-")}</td>
+      <td>${esc(contactLine(l).names || l.name)}</td>
+      <td>${esc(contactLine(l).phones || l.phone || "-")}</td>
       <td>${esc(l.title || "-")}</td>
       <td>${esc(l.status || "-")}</td>
       <td><span class="pill ${tierClass(l.last_tier)}">${esc(l.last_tier || "未评分")}</span>
@@ -429,7 +454,8 @@ function filterAndSortLeads(leads) {
   }
   if (q) {
     rows = rows.filter((l) => {
-      const hay = `${l.company || ""} ${l.name || ""} ${l.phone || ""} ${l.title || ""}`.toLowerCase();
+      const people = leadContacts(l);
+      const hay = `${l.company || ""} ${people.map((c) => `${c.name || ""} ${c.phone || ""} ${c.title || ""} ${c.notes || ""}`).join(" ")}`.toLowerCase();
       return hay.includes(q);
     });
   }
@@ -534,9 +560,9 @@ function renderAnalyzeTable() {
                 <span class="pill ${called ? "called" : "pending-call"}">${called ? `已触达${callCount > 1 ? ` · ${callCount}次` : ""}` : "未触达"}</span>
               </div>
               <div class="ac-meta">
-                <span>${esc(l.name || "-")}</span>
-                <span>${esc(l.title || "职位未知")}</span>
-                <span>${esc(l.phone || "无电话")}</span>
+                <span>${esc(contactLine(l).names || l.name || "-")}</span>
+                <span>${esc(l.title || contactLine(l).title || "职位未知")}</span>
+                <span>${esc(contactLine(l).phones || l.phone || "无电话")}</span>
                 ${l.last_score != null ? `<span class="ac-score">${esc(l.last_score)} 分</span>` : ""}
                 ${when ? `<span class="ac-date">${esc(when)}</span>` : ""}
               </div>
@@ -567,15 +593,28 @@ function renderLeadModalContent(lead, extra = {}) {
   const comps = extra.competitor_hits || [];
   const called = hasBeenCalled(lead.id);
 
+  const contacts = leadContacts(lead);
   $("#leadModalCompany").textContent = lead.company || "客户详情";
   $("#leadModalMeta").innerHTML = `
-    <span>联系人：<strong>${esc(lead.name || "-")}</strong></span>
-    <span>职位：${esc(lead.title || "-")}</span>
-    <span class="lead-phone">电话：<strong>${esc(lead.phone || "-")}</strong></span>
+    <span>联系人：<strong>${esc(contacts.map((c) => c.name).filter(Boolean).join("、") || "-")}</strong></span>
+    <span class="lead-phone">电话：<strong>${esc(contacts.map((c) => c.phone).filter(Boolean).join(" / ") || "-")}</strong></span>
     <span class="pill ${tierClass(lead.last_tier)}">${esc(lead.last_tier || "未评分")}</span>
     ${lead.last_score != null ? `<span class="ac-score">${esc(lead.last_score)} 分</span>` : ""}
     <span class="pill ${called ? "called" : "pending-call"}">${called ? "已触达" : "未触达"}</span>
   `;
+  const box = $("#leadContactsBox");
+  if (box) {
+    box.innerHTML = contacts.length
+      ? `<div class="contact-list">${contacts
+          .map(
+            (c) => `<div class="contact-item">
+              <div><strong>${esc(c.name || "客户")}</strong> ${esc(c.title || "")}<div class="muted">${esc(c.phone || "无电话")}</div></div>
+              <div class="muted">${esc(c.notes || "")}</div>
+            </div>`
+          )
+          .join("")}</div>`
+      : `<p class="muted">暂无联系人</p>`;
+  }
 
   const opener = lead.phone_opener || "暂无预生成开场白，可先补充信息后重新分析。";
   const wechat = lead.wechat_invite || "方便加一下微信吗？我把同行业案例发您看一下。";
@@ -953,6 +992,7 @@ const importConflictState = {
   queue: [],
   index: 0,
   imported: 0,
+  merged: 0,
   overwritten: 0,
   skipped: 0,
   mapping: "",
@@ -1017,15 +1057,15 @@ function closeImportConflict() {
 
 function finishImportResult() {
   closeImportConflict();
-  const { imported, overwritten, skipped, mapping } = importConflictState;
+  const { imported, merged, overwritten, skipped, mapping } = importConflictState;
   $("#importResult").classList.remove("hidden");
   $("#importResult").innerHTML = `<div class="block" style="background:#fff;border:1px solid var(--line);border-radius:14px;padding:0.85rem;margin-top:1rem">
-      <strong>导入完成：新增 ${imported} 条，覆盖 ${overwritten} 条，跳过 ${skipped} 条</strong>
+      <strong>导入完成：新增 ${imported} 家公司，并入联系人 ${merged} 位，覆盖 ${overwritten} 条，跳过 ${skipped} 条</strong>
       <div class="muted">${esc(mapping || "")}</div>
       <div class="row-actions"><button class="btn" id="btnAfterImport" type="button">去客户触达</button></div>
     </div>`;
   $("#btnAfterImport").onclick = () => switchView("analyze");
-  toast(`导入完成：新增 ${imported}，覆盖 ${overwritten}，跳过 ${skipped}`);
+  toast(`导入完成：新增 ${imported} 家，并入 ${merged} 位联系人，覆盖 ${overwritten}，跳过 ${skipped}`);
 }
 
 async function overwriteImportItems(items) {
@@ -1050,8 +1090,9 @@ async function handleExcel(file) {
   fd.append("file", file);
   try {
     const res = await withLoading("正在识别名单，请稍候…", async () => {
-      const r = await fetch("/api/import/excel", { method: "POST", body: fd });
+      const r = await fetch("/api/import/excel", { method: "POST", body: fd, credentials: "same-origin" });
       const data = await r.json();
+      if (r.status === 401) showLogin();
       if (!r.ok) throw new Error(data.detail || "导入失败");
       return data;
     });
@@ -1059,6 +1100,7 @@ async function handleExcel(file) {
     renderImportLeads();
     const conflicts = res.conflicts || [];
     importConflictState.imported = res.imported || 0;
+    importConflictState.merged = res.merged || 0;
     importConflictState.overwritten = 0;
     importConflictState.skipped = 0;
     importConflictState.mapping = res.mapping_notes || "";
@@ -1066,7 +1108,7 @@ async function handleExcel(file) {
       importConflictState.queue = conflicts;
       importConflictState.index = 0;
       renderImportConflict();
-      toast(`已导入 ${res.imported} 条新客户，另有 ${conflicts.length} 条手机号重复，请确认是否覆盖`);
+      toast(`已导入 ${res.imported || 0} 家公司，并入 ${res.merged || 0} 位联系人，另有 ${conflicts.length} 个手机号属于其他公司`);
     } else {
       finishImportResult();
     }
@@ -1083,6 +1125,26 @@ function bindEvents() {
     btn.onclick = () => switchView(btn.dataset.view || btn.dataset.go);
   });
   $("#btnHelp").onclick = openHelp;
+  $("#addContactForm")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!state.currentLeadId) return;
+    const obj = formToObject(e.target);
+    try {
+      const saved = await api(`/api/leads/${encodeURIComponent(state.currentLeadId)}/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(obj),
+      });
+      const idx = state.leads.findIndex((l) => l.id === saved.id);
+      if (idx >= 0) state.leads[idx] = saved;
+      else state.leads.unshift(saved);
+      e.target.reset();
+      renderLeadModalContent(saved, state.analysis?.lead?.id === saved.id ? state.analysis : {});
+      toast("已新增联系人");
+    } catch (err) {
+      toast(err.message || "新增联系人失败");
+    }
+  });
   $("#helpClose").onclick = () => $("#helpModal").classList.add("hidden");
   $("#helpModal").onclick = (e) => {
     if (e.target.id === "helpModal") $("#helpModal").classList.add("hidden");
@@ -1118,7 +1180,8 @@ function bindEvents() {
     const btn = $("#btnExportData");
     try {
       showLoading("正在打包数据…", btn);
-      const res = await fetch("/api/export/data.zip");
+      const res = await fetch("/api/export/data.zip", { credentials: "same-origin" });
+      if (res.status === 401) showLogin();
       if (!res.ok) {
         let msg = `导出失败（${res.status}）`;
         try {
@@ -1305,13 +1368,89 @@ function bindEvents() {
   };
 }
 
+function showLogin() {
+  $("#loginGate")?.classList.remove("hidden");
+  $("#loginError")?.classList.add("hidden");
+}
+
+function applySession(me) {
+  state.me = me;
+  const name = $("#sessionName");
+  if (name) name.textContent = me.department || me.display_name || me.username;
+  $("#navAudit")?.classList.toggle("hidden", me.role !== "admin");
+  $("#loginGate")?.classList.add("hidden");
+}
+
+async function loadAudit(rangeKey) {
+  state.auditRange = rangeKey;
+  $("#auditRange7")?.classList.toggle("secondary", rangeKey !== "today");
+  $("#auditRange7")?.classList.toggle("ghost", rangeKey === "today");
+  $("#auditRangeToday")?.classList.toggle("secondary", rangeKey === "today");
+  $("#auditRangeToday")?.classList.toggle("ghost", rangeKey !== "today");
+  const data = await api(`/api/audit/stats?range=${rangeKey}`);
+  const rows = (data.users || []).map((user) => {
+    const actions = Object.entries(user.by_action || {})
+      .map(([action, count]) => `${esc(action)} ${count}`)
+      .join(" · ");
+    const active = user.last_active ? esc(String(user.last_active).replace("T", " ").slice(0, 16)) : "—";
+    return `<tr>
+      <td>${esc(user.department)}</td>
+      <td>${esc(user.username)}</td>
+      <td>${user.login_count || 0}</td>
+      <td>${active}</td>
+      <td>${user.operation_count || 0}</td>
+      <td>${actions || "—"}</td>
+    </tr>`;
+  });
+  $("#auditTable").innerHTML = `<table>
+    <thead><tr><th>部门</th><th>账号</th><th>登录</th><th>最近活跃</th><th>操作</th><th>分类</th></tr></thead>
+    <tbody>${rows.join("") || `<tr><td colspan="6">暂无事业部账户</td></tr>`}</tbody>
+  </table>`;
+}
+
+function bindLogin() {
+  $("#loginForm").onsubmit = async (e) => {
+    e.preventDefault();
+    $("#loginError").classList.add("hidden");
+    try {
+      const me = await api("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: $("#loginUser").value.trim(),
+          password: $("#loginPass").value,
+        }),
+      });
+      $("#loginPass").value = "";
+      applySession(me);
+      await loadAll();
+      switchView("home");
+    } catch (err) {
+      $("#loginError").textContent = err.message || "登录失败";
+      $("#loginError").classList.remove("hidden");
+    }
+  };
+  $("#btnLogout").onclick = async () => {
+    try {
+      await api("/api/auth/logout", { method: "POST" });
+    } catch (_) {}
+    state.me = null;
+    showLogin();
+  };
+  $("#auditRange7").onclick = () => loadAudit("7d").catch((e) => toast(e.message));
+  $("#auditRangeToday").onclick = () => loadAudit("today").catch((e) => toast(e.message));
+}
+
 async function boot() {
   bindEvents();
+  bindLogin();
   try {
+    const me = await api("/api/auth/me");
+    applySession(me);
     await loadAll();
     switchView("home");
   } catch (e) {
-    toast(`启动失败：${e.message}`);
+    if ($("#loginGate").classList.contains("hidden")) toast(`启动失败：${e.message}`);
   }
 }
 
