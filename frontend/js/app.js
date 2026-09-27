@@ -8,6 +8,9 @@ const state = {
   analysis: null,
   lastScript: null,
   analyzePage: 1,
+  moduleTab: "outreach",
+  outreachView: "home",
+  stockView: "upload",
 };
 
 const MATERIAL_OPTIONS = [
@@ -159,8 +162,10 @@ function formToObject(form) {
 }
 
 function switchView(name) {
+  if (state.moduleTab === "stock") return;
   if (name === "script" || name === "record") name = "analyze";
-  $$(".side-item").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  state.outreachView = name;
+  $$("#navOutreach .side-item").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
   $$(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
   if (name === "home") loadHome();
   if (name === "import") renderImportLeads();
@@ -169,6 +174,24 @@ function switchView(name) {
   if (name === "competitors") renderCompetitors();
   if (name === "scripts") renderScripts();
   if (name === "audit") loadAudit(state.auditRange || "7d");
+}
+
+function switchModule(name) {
+  state.moduleTab = name === "stock" ? "stock" : "outreach";
+  $("#tabOutreach")?.classList.toggle("active", state.moduleTab === "outreach");
+  $("#tabStock")?.classList.toggle("active", state.moduleTab === "stock");
+  $("#navOutreach")?.classList.toggle("hidden", state.moduleTab !== "outreach");
+  $("#navStock")?.classList.toggle("hidden", state.moduleTab !== "stock");
+  const url = new URL(location.href);
+  if (state.moduleTab === "stock") url.searchParams.set("module", "stock");
+  else url.searchParams.delete("module");
+  history.replaceState(null, "", url);
+  if (state.moduleTab === "stock") {
+    $$(".view").forEach((v) => v.classList.toggle("active", v.id === "view-stock"));
+    window.StockApp?.show();
+    return;
+  }
+  switchView(state.outreachView || "home");
 }
 
 async function loadAll() {
@@ -1379,6 +1402,7 @@ function applySession(me) {
   if (name) name.textContent = me.department || me.display_name || me.username;
   $("#navAudit")?.classList.toggle("hidden", me.role !== "admin");
   $("#loginGate")?.classList.add("hidden");
+  return true;
 }
 
 async function loadAudit(rangeKey) {
@@ -1422,9 +1446,9 @@ function bindLogin() {
         }),
       });
       $("#loginPass").value = "";
-      applySession(me);
+      if (applySession(me) === false) return;
       await loadAll();
-      switchView("home");
+      switchModule(initialModule());
     } catch (err) {
       $("#loginError").textContent = err.message || "登录失败";
       $("#loginError").classList.remove("hidden");
@@ -1439,18 +1463,29 @@ function bindLogin() {
   };
   $("#auditRange7").onclick = () => loadAudit("7d").catch((e) => toast(e.message));
   $("#auditRangeToday").onclick = () => loadAudit("today").catch((e) => toast(e.message));
+  $("#tabOutreach").onclick = () => switchModule("outreach");
+  $("#tabStock").onclick = () => switchModule("stock");
+}
+
+function initialModule() {
+  return new URLSearchParams(location.search).get("module") === "stock" ? "stock" : "outreach";
 }
 
 async function boot() {
-  bindEvents();
-  bindLogin();
+  document.querySelector(".module-tabs")?.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    switchModule(btn.id === "tabStock" ? "stock" : "outreach");
+  });
   try {
+    bindEvents();
+    bindLogin();
     const me = await api("/api/auth/me");
-    applySession(me);
+    if (applySession(me) === false) return;
     await loadAll();
-    switchView("home");
+    switchModule(initialModule());
   } catch (e) {
-    if ($("#loginGate").classList.contains("hidden")) toast(`启动失败：${e.message}`);
+    if ($("#loginGate")?.classList.contains("hidden")) toast(`启动失败：${e.message}`);
   }
 }
 

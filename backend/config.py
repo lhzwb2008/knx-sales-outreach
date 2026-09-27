@@ -19,8 +19,9 @@ DASHSCOPE_BASE_URL = os.getenv(
 ).rstrip("/")
 DASHSCOPE_MODEL = os.getenv("DASHSCOPE_MODEL", "deepseek-v4-pro").strip()
 DASHSCOPE_ENABLE_THINKING = (
-    os.getenv("DASHSCOPE_ENABLE_THINKING", "false").strip().lower() in ("1", "true", "yes")
+    os.getenv("DASHSCOPE_ENABLE_THINKING", "true").strip().lower() in ("1", "true", "yes")
 )
+DASHSCOPE_REASONING_EFFORT = os.getenv("DASHSCOPE_REASONING_EFFORT", "low").strip() or "low"
 DASHSCOPE_TIMEOUT = float(os.getenv("DASHSCOPE_TIMEOUT", "120"))
 DASHSCOPE_MAX_RETRIES = int(os.getenv("DASHSCOPE_MAX_RETRIES", "3"))
 

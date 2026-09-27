@@ -351,6 +351,40 @@ body::before {
 .sidebar .btn.ghost { color: #9eb8c8; border-color: rgba(255, 255, 255, 0.16); }
 .btn.ghost:hover { color: var(--ink); border-color: var(--accent); background: var(--accent-soft); }
 .sidebar .btn.ghost:hover { color: #eaf8ff; background: rgba(0, 221, 255, 0.08); border-color: rgba(0, 221, 255, 0.28); }
+
+.module-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+  padding: 0 0.35rem 0.85rem;
+}
+.module-tab {
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: #c5d7e2;
+  border-radius: 9px;
+  padding: 0.4rem 0.2rem;
+  font: inherit;
+  font-size: 0.86rem;
+  cursor: pointer;
+}
+.module-tab.active {
+  background: rgba(0, 221, 255, 0.16);
+  color: #fff;
+  border-color: rgba(0, 221, 255, 0.45);
+}
+#navOutreach, #navStock { flex: 1; min-height: 0; overflow: auto; }
+.stock-copy { white-space: pre-wrap; line-height: 1.7; margin: 0.2rem 0 0.85rem; }
+.stock-lines .stock-copy { margin-bottom: 1rem; }
+.stock-wait {
+  display: grid;
+  justify-items: center;
+  gap: 0.35rem;
+  padding: 1.4rem 1rem 1.2rem;
+  text-align: center;
+}
+.stock-wait p { margin: 0; }
+.stock-wait-sub { color: var(--muted); font-size: 0.88rem; }
 .btn.small { padding: 0.34rem 0.7rem; font-size: 0.84rem; border-radius: 9px; }
 .btn:disabled { opacity: 0.5; cursor: not-allowed; filter: none; }
 

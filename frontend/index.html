@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/styles.css?v=20260924-contacts-v1" />
+  <link rel="stylesheet" href="/css/styles.css?v=20260927-wait" />
 </head>
 <body>
   <div class="shell">
@@ -24,6 +24,12 @@
         </div>
       </div>
 
+      <div class="module-tabs" role="tablist">
+        <button class="module-tab active" id="tabOutreach" type="button">增量</button>
+        <button class="module-tab" id="tabStock" type="button">存量</button>
+      </div>
+
+      <div id="navOutreach">
       <div class="side-group">
         <div class="side-label">工作流</div>
         <button class="side-item" data-view="import">
@@ -59,6 +65,8 @@
           <span>话术库</span>
         </button>
       </div>
+      </div>
+      <div id="navStock" class="hidden"></div>
 
       <div class="side-foot">
         <div class="session-chip" id="sessionChip">
@@ -286,6 +294,7 @@
           </div>
         </section>
 
+        <section id="view-stock" class="view"></section>
       </main>
     </div>
   </div>
@@ -410,6 +419,7 @@
     </form>
   </div>
 
-  <script src="/js/app.js?v=20260924-contacts-v1"></script>
+  <script src="/js/stock.js?v=20260927-effort"></script>
+  <script src="/js/app.js?v=20260927-tabs5"></script>
 </body>
 </html>

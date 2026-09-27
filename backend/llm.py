@@ -42,6 +42,8 @@ def chat_complete(
     }
     thinking = config.DASHSCOPE_ENABLE_THINKING if enable_thinking is None else enable_thinking
     body["enable_thinking"] = thinking
+    if thinking:
+        body["reasoning_effort"] = config.DASHSCOPE_REASONING_EFFORT
     if response_format_json:
         body["response_format"] = {"type": "json_object"}
 

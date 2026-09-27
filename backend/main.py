@@ -7,12 +7,14 @@ from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import auth, config, engine, excel_import, image_gen, llm, overseas, scripting, storage
 from .seed_data import reset_and_seed, seed_all
+from .stock import storage as stock_storage
+from .stock.routes import router as stock_router
 
 app = FastAPI(title="肯耐珂萨销售陌拜工作台", version="2.0.0")
 app.add_middleware(
@@ -22,11 +24,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.middleware("http")(auth.guard)
+app.include_router(stock_router)
 
 
 @app.on_event("startup")
 def _startup() -> None:
     storage.ensure_data_dir()
+    stock_storage.ensure_dir()
     auth.ensure_users()
     seed_all()
     overseas.ensure_catalog()
@@ -289,8 +293,8 @@ def api_reset_seed() -> dict:
 
 
 @app.get("/api/export/data.zip")
-def export_data_zip() -> StreamingResponse:
-    """打包 data/*.json 供本地下载；不写入 Git。"""
+def export_data_zip(request: Request) -> StreamingResponse:
+    """打包当前模块的 JSON 供本地下载；不写入 Git。"""
     storage.ensure_data_dir()
     buf = io.BytesIO()
     written = 0
@@ -307,6 +311,12 @@ def export_data_zip() -> StreamingResponse:
             if path.name.startswith("_") or path.name.startswith("._"):
                 continue
             zf.write(path, arcname=path.name)
+            written += 1
+        stock_storage.ensure_dir()
+        for path in sorted(stock_storage.STOCK_DIR.glob("*.json")):
+            if path.name.startswith("_") or path.name.startswith("._"):
+                continue
+            zf.write(path, arcname=f"stock/{path.name}")
             written += 1
     if written == 0:
         raise HTTPException(404, "暂无可导出的数据文件")
@@ -534,16 +544,8 @@ def ai_analyze_need(body: AIAnalyzeIn) -> dict:
     )
     try:
         insights = llm.chat_json(system=system, user=user, temperature=0.3, max_tokens=2200)
-    except llm.LLMError:
-        insights = scripting.fallback_insights(lead, plan, result.get("rule_hits") or [])
-        if overseas_hit:
-            tpl = storage.get_item("scripts", "T012") or overseas.SCRIPTS[0]
-            insights["phone_opener"] = tpl.get("body") or insights["phone_opener"]
-            insights["wechat_invite"] = tpl.get("wechat") or insights["wechat_invite"]
-            insights["recommended_products"] = overseas.merge_products(
-                insights["recommended_products"], overseas.PRODUCT["name"]
-            )
-            insights["talk_angle"] = "先确认海外是当地雇人还是派人出去；被拒后切派出/当地负责人能不能带住团队。"
+    except llm.LLMError as e:
+        raise HTTPException(502, "需求分析失败，请稍后重试") from e
 
     lead = _lead_or_404(body.lead_id)
     lead["need_analysis"] = str(insights.get("need_analysis") or "").strip()
@@ -886,6 +888,11 @@ app.mount("/static", StaticFiles(directory=str(config.FRONTEND_DIR)), name="stat
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(config.FRONTEND_DIR / "index.html")
+
+
+@app.get("/stock")
+def stock_page() -> RedirectResponse:
+    return RedirectResponse("/?module=stock")
 
 
 @app.get("/css/{path:path}")

@@ -32,6 +32,37 @@ SEED_USERS = (
     {"username": "c3", "password": "BuC3@knx2026", "display_name": "事业部C3", "department": "事业部C3", "role": "user"},
 )
 
+# 仅补缺，不覆盖已有账号密码。存量账号和陌拜账号互不进入对方工作台。
+STOCK_SEED_USERS = (
+    {
+        "username": "stock-admin",
+        "password": "StockAdmin@knx2026",
+        "display_name": "存量管理员",
+        "department": "存量管理",
+        "role": "admin",
+        "module": "stock",
+        "stock_role": "admin",
+    },
+    {
+        "username": "stock-a",
+        "password": "StockA@knx2026",
+        "display_name": "存量部门A",
+        "department": "存量部门A",
+        "role": "user",
+        "module": "stock",
+        "stock_role": "frontline",
+    },
+    {
+        "username": "stock-ro",
+        "password": "StockRo@knx2026",
+        "display_name": "存量只读",
+        "department": "存量只读",
+        "role": "user",
+        "module": "stock",
+        "stock_role": "readonly",
+    },
+)
+
 _ACTION_RULES: tuple[tuple[str, str, str], ...] = (
     ("POST", "/api/import/excel", "导入名单"),
     ("POST", "/api/import/overwrite", "覆盖导入"),
@@ -92,31 +123,41 @@ def verify_password(password: str, stored: str) -> bool:
 
 
 def public_user(user: dict) -> dict:
-    return {
+    module = user.get("module") or "outreach"
+    data = {
         "username": user.get("username") or "",
         "display_name": user.get("display_name") or "",
         "department": user.get("department") or "",
         "role": user.get("role") or "user",
+        "module": module,
     }
+    if module == "stock":
+        data["stock_role"] = user.get("stock_role") or "frontline"
+    return data
+
+
+def _materialize_user(item: dict, now: str) -> dict:
+    row = {
+        "username": item["username"],
+        "password_hash": hash_password(item["password"]),
+        "display_name": item["display_name"],
+        "department": item["department"],
+        "role": item["role"],
+        "module": item.get("module") or "outreach",
+        "created_at": now,
+    }
+    if item.get("stock_role"):
+        row["stock_role"] = item["stock_role"]
+    return row
 
 
 def ensure_users() -> None:
+    """只在还没有账户文件时初始化。已有 users.json 一律不改，避免覆盖线上正在使用的账号。"""
     path = DATA_DIR / f"{USERS_FILE}.json"
     if path.exists():
         return
     now = storage.now_iso()
-    users = []
-    for item in SEED_USERS:
-        users.append(
-            {
-                "username": item["username"],
-                "password_hash": hash_password(item["password"]),
-                "display_name": item["display_name"],
-                "department": item["department"],
-                "role": item["role"],
-                "created_at": now,
-            }
-        )
+    users = [_materialize_user(item, now) for item in (*SEED_USERS, *STOCK_SEED_USERS)]
     storage.write_collection(USERS_FILE, users)
 
 
@@ -302,6 +343,11 @@ def audit_stats(range_key: str) -> dict:
 
 def is_public_api(path: str) -> bool:
     return path in PUBLIC_API or not path.startswith("/api/")
+
+
+def module_block(user: dict, path: str, method: str) -> str | None:
+    """登录只用于审计。已登录账号可以同时使用增量和存量。"""
+    return None
 
 
 async def guard(request: Request, call_next):
