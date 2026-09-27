@@ -6,6 +6,7 @@
 """
 from __future__ import annotations
 
+import re
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -292,14 +293,14 @@ def build_lines(result: dict[str, Any]) -> list[str]:
         )
     else:
         line4 = (
-            "确认信号未成立，不得作为开口依据。"
-            "现在只能说明材料里看到了什么，不能据此约电话去卖产品。缺的是能证明组织已经在动的事实，例如竞聘、海外工厂投产、万店或督导体系、核心岗位招聘。"
+            "确认信号还不够齐。电话里可以先核对材料里已经写明的事实，产品先放一放。"
+            "还缺能说明组织已经在动的事实，例如竞聘、海外工厂投产、万店或督导体系、核心岗位招聘。"
         )
     if result["signal_level"] == "confirm":
         line5 = "并列建议，没有优先级。已购项不重复卖，下面每一项都保留，电话里问客户先做哪件：\n" + _product_lines(result)
     else:
         line5 = (
-            "确认信号未成立，不得作为开口依据。下面只是规则并列提到的产品，不能当本次电话的卖点：\n"
+            "下面是可以先记着的并列产品，等事实更清楚再谈，没有先后：\n"
             + _product_lines(result)
         )
     return [line1, line2, line3, line4, line5]
@@ -400,6 +401,71 @@ def analyze(record: dict[str, Any], disabled: set[str] | None = None) -> dict[st
     result["pitch"] = build_pitch(result)
     result["supplement"] = build_supplement(result, text)
     return result
+
+
+_DROP_SENTENCE = re.compile(
+    r"严禁|不得|禁止|不能对外|仅用于内部|内部知识|硬性约束|"
+    r"违反客户意愿|任何主动触达|必须在客户明确"
+)
+_TRAILING_HINT = re.compile(r"不宜外呼|不能据此|不能当本次")
+_SOFT_HINT = "这几项事实还不够齐，电话里可以先核对情况，产品先放一放。"
+_BAN_LEAD = re.compile(
+    r"[，,](?:但|并且|同时|另外)?[^，,。！？\n]*(?:主动提出|目前阶段|客户意愿|不宜)[^，,。！？\n]*$"
+)
+
+
+def soften_text(text: str) -> tuple[str, bool]:
+    """禁令整句删掉。事实写在前面、句尾才是提醒时，留下事实。"""
+    if not text or not (_DROP_SENTENCE.search(text) or _TRAILING_HINT.search(text)):
+        return text or "", False
+    kept: list[str] = []
+    for piece in re.split(r"(?<=[。！？\n])", text):
+        if not piece:
+            continue
+        if _DROP_SENTENCE.search(piece):
+            continue
+        mark = _TRAILING_HINT.search(piece)
+        if not mark:
+            kept.append(piece)
+            continue
+        prefix = piece[: mark.start()]
+        while True:
+            nxt = _BAN_LEAD.sub("", prefix)
+            if nxt == prefix:
+                break
+            prefix = nxt
+        prefix = prefix.rstrip("，,；;、 \n")
+        if len(prefix) >= 12:
+            if not prefix.endswith(("。", "！", "？", "\n")):
+                prefix += "。"
+            kept.append(prefix)
+    return "".join(kept).strip(), True
+
+
+def soften_copy(lines: list[Any], pitch: str, supplement: str) -> tuple[list[str], str, str]:
+    """禁令整句删掉。若因此没剩下可用文字，只留一句委婉提醒，不重复展开。"""
+    softened: list[str] = []
+    hinted = False
+    for line in lines or []:
+        cleaned, dropped = soften_text(str(line))
+        if cleaned:
+            softened.append(cleaned)
+            continue
+        if dropped and not hinted:
+            softened.append(_SOFT_HINT)
+            hinted = True
+
+    def _tail(text: str) -> str:
+        nonlocal hinted
+        cleaned, dropped = soften_text(text or "")
+        if cleaned:
+            return cleaned
+        if dropped and not hinted:
+            hinted = True
+            return _SOFT_HINT
+        return ""
+
+    return softened, _tail(pitch), _tail(supplement)
 
 
 def public_analysis(analysis: dict[str, Any], *, include_tension: bool) -> dict[str, Any]:

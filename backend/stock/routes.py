@@ -4,6 +4,7 @@ from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
 from . import narrate, service, storage
+from .engine import soften_copy
 from .importer import parse_stock_rows
 from .. import llm
 
@@ -234,11 +235,16 @@ def _rows(content: bytes) -> list[dict[str, str]]:
 
 def _card_payload(shown: dict) -> dict:
     analysis = shown["analysis"]
+    lines, pitch, supplement = soften_copy(
+        analysis.get("lines") or [],
+        analysis.get("pitch") or "",
+        analysis.get("supplement") or "",
+    )
     return {
         "record": shown,
-        "lines": analysis.get("lines") or [],
-        "pitch": analysis.get("pitch") or "",
-        "supplement": analysis.get("supplement") or "",
+        "lines": lines,
+        "pitch": pitch,
+        "supplement": supplement,
         "products": analysis.get("products") or [],
         "incubation_notice": shown.get("status") == "incubation",
     }

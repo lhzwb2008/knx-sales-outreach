@@ -150,6 +150,22 @@ class EngineTests(unittest.TestCase):
         finally:
             storage.STOCK_DIR = original
 
+    def test_unconfirmed_signal_is_a_soft_hint(self):
+        raw = (
+            "顾问仅可在客户先行提及相应话题时，基于事实进行回应，"
+            "严禁以任何形式暗示或引导客户进入上述产品的推销流程。"
+            "此条内容仅用于内部知识准备，不能对外使用。"
+            "确认信号未成立，不得作为开口依据。"
+        )
+        lines, pitch, supplement = engine.soften_copy([raw, raw], "", "零售转型还在推进，目前阶段不宜外呼。")
+        blob = "\n".join(lines + [pitch, supplement])
+        self.assertNotIn("严禁", blob)
+        self.assertNotIn("不得作为开口依据", blob)
+        self.assertNotIn("内部知识", blob)
+        self.assertNotIn("不宜外呼", blob)
+        self.assertEqual(lines.count(engine._SOFT_HINT), 1)
+        self.assertIn("核对情况", blob)
+
     def test_login_does_not_split_modules(self):
         from backend import auth
 

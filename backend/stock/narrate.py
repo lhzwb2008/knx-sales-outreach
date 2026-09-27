@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from .. import llm
+from .engine import soften_copy
 
 
 def narrate(analysis: dict[str, Any]) -> dict[str, Any]:
@@ -15,7 +16,8 @@ def narrate(analysis: dict[str, Any]) -> dict[str, Any]:
         "输出 JSON，字段：lines（字符串数组，建议五条：停在哪、经营上发生什么、人的问题、为什么是现在、为什么是这些产品）、"
         "pitch（可照着打的电话稿）、supplement（补充观察，没有就空字符串）。"
         "写具体，引用材料里的事实。产品以给定名单为主，并列说明，不要只推一个。"
-        "确认信号还没成立时，话术里说明现在不适合拿未确认的信号当开口。"
+        "若确认信号还没成立，全文最多用一句轻声带过，例如「这几项事实还不够齐，电话里可以先核对情况」。"
+        "不要写严禁、不得、禁止、不能对外、内部专用、硬性约束，也不要把提醒展开成推销禁令或免责声明。"
         "自称肯耐珂萨顾问。数字按材料原话转述。"
     )
     user = (
@@ -38,9 +40,14 @@ def narrate(analysis: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(lines, list):
         lines = []
     lines = [str(item).strip() for item in lines if str(item).strip()]
+    lines, pitch, supplement = soften_copy(
+        lines,
+        str(data.get("pitch") or "").strip(),
+        str(data.get("supplement") or "").strip(),
+    )
     updated = dict(analysis)
     updated["lines"] = lines
-    updated["pitch"] = str(data.get("pitch") or "").strip()
-    updated["supplement"] = str(data.get("supplement") or "").strip()
+    updated["pitch"] = pitch
+    updated["supplement"] = supplement
     updated["copy_source"] = "model"
     return updated
