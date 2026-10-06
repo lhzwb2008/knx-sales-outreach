@@ -23,7 +23,11 @@ def narrate(analysis: dict[str, Any]) -> dict[str, Any]:
     user = (
         f"公司：{analysis.get('company')}\n"
         f"联系人：{analysis.get('contact')} {analysis.get('role_name')}\n"
-        f"已购：{analysis.get('purchased_scope')}，截止 {analysis.get('service_end')}，客单价 {analysis.get('unit_price')}\n"
+        f"已购原文：{analysis.get('purchased_display') or analysis.get('purchased_scope')}，截止 {analysis.get('service_end')}，客单价 {analysis.get('unit_price')}\n"
+        f"分析用经营范围：{'、'.join(analysis.get('mapped_scopes') or []) or '无'}。"
+        f"K米账户：{'有' if analysis.get('kmi_account') else '无'}。"
+        f"咨询未细分：{'是' if analysis.get('consult_unspecified') else '否'}\n"
+        "写到卡片上的已购沿用原文，不要改成经营范围名称。K米不要写成某一条产品线。\n"
         f"公开材料：{analysis.get('signals_text')}\n"
         f"行业：{(analysis.get('primary_industry') or {}).get('name') or '未命中'}\n"
         f"成熟度：{analysis.get('maturity_label')}\n"

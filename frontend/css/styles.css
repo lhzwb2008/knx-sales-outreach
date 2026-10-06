@@ -374,6 +374,9 @@ body::before {
   border-color: rgba(0, 221, 255, 0.45);
 }
 #navOutreach, #navStock { flex: 1; min-height: 0; overflow: auto; }
+.preview-block { border-top: 1px solid var(--line); margin-top: 0.9rem; padding-top: 0.8rem; }
+.issue-list { margin: 0.35rem 0 0.8rem; padding-left: 1.1rem; }
+.issue-list li { margin: 0.15rem 0; }
 .stock-copy { white-space: pre-wrap; line-height: 1.7; margin: 0.2rem 0 0.85rem; }
 .stock-lines .stock-copy { margin-bottom: 1rem; }
 .stock-wait {

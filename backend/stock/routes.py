@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
-from . import narrate, service, storage
+from . import catalog, narrate, preview, service, storage
 from .engine import soften_copy
 from .importer import parse_stock_rows
 from .. import llm
@@ -26,10 +26,30 @@ class AlignIn(BaseModel):
 class CallIn(BaseModel):
     record_id: str
     intention: str
-    pain_match: str
+    pain_match: str = ""
     pain_note: str = ""
     operator_note: str = ""
     extension: str = ""
+    contact_id: str = ""
+    channel_number: str = ""
+    invalidate: bool = False
+
+
+class ConfirmIn(BaseModel):
+    destination: str
+    owner: str = ""
+    acknowledge: bool = False
+    warning_count: int = 0
+    companies: list[dict] = Field(default_factory=list)
+
+
+class IndustryIn(BaseModel):
+    industry_code: str
+
+
+class DealMapIn(BaseModel):
+    keyword: str
+    scope: str
 
 
 class ToggleIn(BaseModel):
@@ -88,20 +108,17 @@ def admin_base(request: Request) -> list[dict]:
 
 
 @router.get("/admin/pool")
-def admin_pool(request: Request) -> list[dict]:
-    return service.list_for(_require(request, "admin", "readonly"), "pool")
+def admin_pool(request: Request, industry: str = "") -> list[dict]:
+    rows = service.list_for(_require(request, "admin", "readonly"), "pool")
+    if industry:
+        rows = [item for item in rows if item.get("industry_code") == industry]
+    return rows
 
 
 @router.get("/admin/align")
 def admin_align(request: Request) -> list[dict]:
     viewer = _require(request, "admin", "readonly")
-    rows = [
-        service.present(item, viewer)
-        for item in storage.list_items("records")
-        if item.get("align_status") == "unaligned"
-    ]
-    rows.sort(key=lambda item: item.get("updated_at") or "", reverse=True)
-    return rows
+    return service.pending_subjects(viewer)
 
 
 @router.get("/admin/grants")
@@ -147,10 +164,67 @@ def admin_save_settings(body: SettingsIn, request: Request) -> dict:
     return storage.save_settings(body.commission_rate)
 
 
+@router.get("/admin/industries")
+def admin_industries(request: Request) -> list[dict]:
+    _require(request, "admin", "readonly")
+    return catalog.industry_options()
+
+
+@router.get("/admin/deal-map")
+def admin_deal_map(request: Request) -> list[dict]:
+    _require(request, "admin", "readonly")
+    return service.deal_map_rows()
+
+
+@router.post("/admin/deal-map")
+def admin_add_deal(body: DealMapIn, request: Request) -> list[dict]:
+    _require(request, "admin")
+    return _call(lambda: service.add_deal_rule(body.keyword, body.scope))
+
+
+@router.post("/admin/industry/{record_id}")
+def admin_set_industry(record_id: str, body: IndustryIn, request: Request) -> dict:
+    user = _require(request, "admin")
+    saved = _call(lambda: service.set_industry(record_id, body.industry_code))
+    return service.present(saved, user)
+
+
+@router.post("/admin/imports/preview")
+async def admin_import_preview(request: Request, file: UploadFile = File(...)) -> dict:
+    _require(request, "admin")
+    try:
+        return preview.build_preview(await file.read())
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+
+
+@router.post("/admin/imports/confirm")
+def admin_import_confirm(body: ConfirmIn, request: Request) -> dict:
+    user = _require(request, "admin")
+    created = _call(
+        lambda: service.import_companies(
+            body.companies,
+            destination=body.destination,
+            owner=body.owner,
+            assigned_by=user.get("username") or "",
+            acknowledge=body.acknowledge,
+            warning_count=body.warning_count,
+        )
+    )
+    return {"count": len(created), "records": [service.present(item, user) for item in created]}
+
+
 @router.post("/admin/imports")
 async def admin_import(request: Request, file: UploadFile = File(...)) -> dict:
     user = _require(request, "admin")
-    rows = _rows(await file.read())
+    content = await file.read()
+    try:
+        peeked = preview.build_preview(content)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    if not (peeked["blockers"] and peeked["blockers"][0].get("code") == "B5"):
+        raise HTTPException(400, "公海成交表需要先预览，确认去向后再导入")
+    rows = _rows(content)
     created = [service.present(_with_model(service.create_record(row, source="admin_import", owner="")), user) for row in rows]
     return {"count": len(created), "records": created}
 

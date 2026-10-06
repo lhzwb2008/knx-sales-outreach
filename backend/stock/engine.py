@@ -258,7 +258,14 @@ def build_lines(result: dict[str, Any]) -> list[str]:
     if result.get("unit_price"):
         history.append(f"客单价 {result['unit_price']}")
     history_text = f"（{'，'.join(history)}）" if history else ""
-    if result["maturity_skipped"]:
+    if result["maturity_reason"] == "kmi":
+        line1 = (
+            f"已购「{purchased}」。该原文对应充值账户，产品线覆盖未知，四格不因此填实。"
+            "下一阶段只靠其他已购原文；没有其他原文时，按所属行业的并列建议来写。"
+        )
+    elif result["maturity_reason"] == "consult":
+        line1 = f"已购「{purchased}」。有咨询成交，产品线未细分，不填实战略层。"
+    elif result["maturity_skipped"]:
         reason = "为空" if result["maturity_reason"] == "empty" else "对不上四阶段货架"
         line1 = (
             f"已购经营范围{reason}，未判断成熟度，所以不假装知道他们停在哪一格。"
@@ -344,7 +351,86 @@ def build_supplement(result: dict[str, Any], text: str) -> str:
     return _clip("".join(notes), 320)
 
 
+def _analyze_business(record: dict[str, Any]) -> dict[str, Any]:
+    from . import catalog
+
+    display = str(record.get("purchased_display") or record.get("purchased_scope") or "")
+    scopes = [str(item) for item in record.get("scopes") or [] if str(item).strip()]
+    translated = {
+        "scopes": scopes,
+        "stages": [catalog._stage_of(name) for name in scopes],
+        "kmi_account": bool(record.get("kmi_account")),
+        "consult_unspecified": bool(record.get("consult_unspecified")),
+        "unrecognized": [str(item) for item in record.get("unrecognized") or []],
+    }
+    maturity = catalog.maturity_from_translation(translated)
+    industry_code = str(record.get("industry_code") or "")
+    signal_text = _text(record.get("signals_text"), record.get("notes"))
+    level, leading, confirm = catalog.business_signals(industry_code, signal_text)
+    products = catalog.business_products(
+        industry_code,
+        scopes,
+        kmi=bool(record.get("kmi_account")),
+        consult=bool(record.get("consult_unspecified")),
+        text=signal_text,
+        company=str(record.get("company") or ""),
+        exception=bool(record.get("entity_exception")),
+    )
+    industry = catalog.industry_by_code(industry_code)
+    gaps: list[str] = []
+    if maturity["reason"] == "kmi":
+        gaps.append("有 K米账户，四格不因此填实")
+    elif maturity["reason"] == "consult":
+        gaps.append("有咨询成交，产品线未细分")
+    elif maturity["reason"] == "unmapped":
+        gaps.append("有成交原文未命中对照，不能进入可触达")
+    elif maturity["reason"] == "empty":
+        gaps.append("已购经营范围为空，未判断成熟度")
+    if record.get("entity_exception"):
+        gaps.append("主体例外，不按品牌公司的政策开口")
+    elif record.get("industry_status") == "pending" or not industry_code:
+        gaps.append("行业待确认")
+    if level == "none":
+        gaps.append("尚未形成先导或确认信号")
+    result = {
+        "company": record.get("company") or "",
+        "purchased_scope": display,
+        "purchased_display": display,
+        "mapped_scopes": scopes,
+        "kmi_account": bool(record.get("kmi_account")),
+        "consult_unspecified": bool(record.get("consult_unspecified")),
+        "primary_industry": {"id": industry_code, "name": industry["name"]} if industry else None,
+        "reference_industries": [],
+        "unmatched_template": industry is None,
+        "maturity_stage": maturity["stage"],
+        "maturity_label": maturity["label"],
+        "maturity_skipped": maturity["skipped"],
+        "maturity_reason": maturity["reason"],
+        "propositions": [],
+        "leading_hits": leading,
+        "confirm_hits": confirm,
+        "signal_level": level,
+        "speakable": catalog.SPEAKABLE.get(industry_code, "行业还未确认，先把主体和成交原文核对清楚。"),
+        "tension_tags": list(record.get("industry_tags") or []),
+        "products": products,
+        "gaps": gaps,
+        "signals_text": record.get("signals_text") or "",
+        "contact": record.get("contact") or "",
+        "role_name": record.get("role_name") or "",
+        "service_end": record.get("service_end") or "",
+        "unit_price": record.get("unit_price") or "",
+    }
+    result["lines"] = build_lines(result)
+    result["pitch"] = build_pitch(result)
+    result["supplement"] = build_supplement(result, signal_text)
+    if record.get("kmi_account") and maturity["reason"] != "kmi":
+        result["lines"][0] = result["lines"][0] + "其中含 K米原文，对应充值账户，不因此填实格子。"
+    return result
+
+
 def analyze(record: dict[str, Any], disabled: set[str] | None = None) -> dict[str, Any]:
+    if record.get("import_profile") == "business":
+        return _analyze_business(record)
     text = _text(
         record.get("industry"),
         record.get("company"),
