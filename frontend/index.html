@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/css/styles.css?v=20261006-preview" />
+  <link rel="stylesheet" href="/css/styles.css?v=20261007-modal" />
 </head>
 <body>
   <div class="shell">
@@ -301,6 +301,16 @@
 
   <div id="toast" class="toast hidden"></div>
 
+  <div id="stockModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="stockModalTitle">
+    <div class="modal-card wide">
+      <div class="stock-modal-bar">
+        <h2 id="stockModalTitle">客户</h2>
+        <button class="btn ghost small" id="stockModalClose" type="button">关闭</button>
+      </div>
+      <div id="stockModalBody"></div>
+    </div>
+  </div>
+
   <div id="loadingModal" class="modal loading-modal hidden" role="alertdialog" aria-live="assertive">
     <div class="loading-card">
       <div class="spinner" aria-hidden="true"></div>
@@ -419,7 +429,7 @@
     </form>
   </div>
 
-  <script src="/js/stock.js?v=20261006-preview"></script>
-  <script src="/js/app.js?v=20260927-tabs5"></script>
+  <script src="/js/stock.js?v=20261007-acl"></script>
+  <script src="/js/app.js?v=20261007-acl"></script>
 </body>
 </html>

@@ -95,7 +95,9 @@ def present(record: dict, viewer: dict) -> dict:
 
 
 def can_read(record: dict, viewer: dict) -> bool:
-    return True
+    from .. import auth
+
+    return auth.owns(viewer, str(record.get("owner") or ""))
 
 
 def list_for(viewer: dict, status: str) -> list[dict]:
@@ -235,6 +237,7 @@ def import_companies(companies: list[dict], *, destination: str, owner: str, ass
             "lock_label": "",
             "align_status": "aligned",
             "import_profile": "business",
+            "import_destination": destination,
             "pain_match": "",
             "pain_note": "",
         }
@@ -249,6 +252,13 @@ def import_companies(companies: list[dict], *, destination: str, owner: str, ass
             record["effective_on"] = today
         created.append(storage.upsert_item("records", record))
     return created
+
+
+def research_and_save(record: dict) -> dict:
+    from . import research
+
+    result = research.lookup(record)
+    return research.apply(record, result)
 
 
 def set_industry(record_id: str, industry_code: str) -> dict:

@@ -26,6 +26,7 @@ def chat_complete(
     max_tokens: int = 2048,
     response_format_json: bool = False,
     enable_thinking: bool | None = None,
+    enable_search: bool = False,
 ) -> str:
     if not available():
         raise LLMError("缺少 DASHSCOPE_API_KEY，请检查 .env")
@@ -41,9 +42,18 @@ def chat_complete(
         "max_tokens": max_tokens,
     }
     thinking = config.DASHSCOPE_ENABLE_THINKING if enable_thinking is None else enable_thinking
+    if enable_search and enable_thinking is None:
+        thinking = False
     body["enable_thinking"] = thinking
     if thinking:
         body["reasoning_effort"] = config.DASHSCOPE_REASONING_EFFORT
+    if enable_search:
+        body["enable_search"] = True
+        body["search_options"] = {
+            "forced_search": True,
+            "enable_source": True,
+            "search_strategy": "max",
+        }
     if response_format_json:
         body["response_format"] = {"type": "json_object"}
 

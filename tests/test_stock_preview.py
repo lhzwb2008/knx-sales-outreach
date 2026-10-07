@@ -189,6 +189,55 @@ class PreviewTests(unittest.TestCase):
         finally:
             storage.STOCK_DIR = original
 
+    def test_research_without_sources_cannot_open_reach(self):
+        from backend.stock import research
+
+        result = research.normalize(
+            {
+                "signal": "confirm",
+                "summary": "看起来在扩张",
+                "actions": ["开了新厂"],
+                "items": [],
+            }
+        )
+        self.assertEqual(result["signal"], "none")
+        original = storage.STOCK_DIR
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                storage.STOCK_DIR = Path(tmp)
+                record = {
+                    "id": "STTEST",
+                    "company": "示例公司",
+                    "source": "self_upload",
+                    "owner": "admin",
+                    "analysis": {"gaps": ["尚未形成先导或确认信号"], "products": []},
+                }
+                saved = research.apply(
+                    record,
+                    research.normalize(
+                        {
+                            "signal": "confirm",
+                            "summary": "招聘启事写明在招组织发展负责人。",
+                            "actions": ["在招组织发展负责人"],
+                            "items": [
+                                {
+                                    "title": "组织发展负责人",
+                                    "url": "https://example.com/job",
+                                    "date": "2026-10-01",
+                                    "fact": "岗位职责包含人才梯队和干部盘点",
+                                }
+                            ],
+                        }
+                    ),
+                )
+                self.assertEqual(saved["status"], "reachable")
+                self.assertEqual(saved["analysis"]["signal_level"], "confirm")
+                self.assertEqual(saved["analysis"]["speakable"], saved["research"]["summary"])
+                self.assertIn("组织发展负责人", saved["analysis"]["speakable"])
+                self.assertNotIn("竞聘", saved["signals_text"])
+        finally:
+            storage.STOCK_DIR = original
+
     def test_le_you_jia_and_union_classification(self):
         home = catalog.classify_company("长沙乐有家企业管理有限公司")
         self.assertEqual(home["industry_code"], "IND06")

@@ -218,7 +218,12 @@ def workbook_to_preview(content: bytes, max_rows: int = 40) -> dict[str, Any]:
     }
 
 
-def parse_leads_with_llm(content: bytes, filename: str = "upload.xlsx") -> dict[str, Any]:
+def parse_leads_with_llm(
+    content: bytes,
+    filename: str = "upload.xlsx",
+    owner: str = "",
+    see_all: bool = True,
+) -> dict[str, Any]:
     preview = workbook_to_preview(content)
     rows = preview["all_rows"]
     compact = rows[:80]
@@ -265,6 +270,8 @@ def parse_leads_with_llm(content: bytes, filename: str = "upload.xlsx") -> dict[
         grouped[company_key].append(incoming)
 
     existing_leads = storage.list_items("leads")
+    if not see_all:
+        existing_leads = [item for item in existing_leads if (item.get("owner") or "") == owner]
     existing_by_phone = _lead_index_by_phone(existing_leads)
     existing_by_company = _lead_index_by_company(existing_leads)
     saved: list[dict[str, Any]] = []
@@ -332,6 +339,7 @@ def parse_leads_with_llm(content: bytes, filename: str = "upload.xlsx") -> dict[
             "industry": next((row["industry"] for row in fresh_rows if row.get("industry")), ""),
             "company_size": next((row["company_size"] for row in fresh_rows if row.get("company_size")), ""),
             "source": "Excel导入",
+            "owner": owner,
             "contacts": contacts,
         }
         sync_primary_contact(lead)

@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
+
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
 
+from .. import auth
 from . import catalog, narrate, preview, service, storage
 from .engine import soften_copy
 from .importer import parse_stock_rows
@@ -68,7 +71,10 @@ def _user(request: Request) -> dict:
 
 
 def _require(request: Request, *_roles: str) -> dict:
-    return _user(request)
+    user = _user(request)
+    if _roles and "frontline" not in _roles and not auth.is_admin(user):
+        raise HTTPException(403, "仅管理员可查看")
+    return user
 
 
 def _record_or_404(record_id: str, viewer: dict) -> dict:
@@ -211,7 +217,8 @@ def admin_import_confirm(body: ConfirmIn, request: Request) -> dict:
             warning_count=body.warning_count,
         )
     )
-    return {"count": len(created), "records": [service.present(item, user) for item in created]}
+    researched = _research_batch(created)
+    return {"count": len(researched), "records": [service.present(item, user) for item in researched]}
 
 
 @router.post("/admin/imports")
@@ -253,11 +260,9 @@ def admin_grant(grant_id: str, request: Request, approved: bool = True) -> dict:
 async def uploads(request: Request, file: UploadFile = File(...)) -> dict:
     user = _require(request, "frontline")
     rows = _rows(await file.read())
-    created = [
-        service.present(_with_model(service.create_record(row, source="self_upload", owner=user["username"])), user)
-        for row in rows
-    ]
-    return {"count": len(created), "records": created}
+    saved = [service.create_record(row, source="self_upload", owner=user["username"]) for row in rows]
+    researched = _research_batch(saved)
+    return {"count": len(researched), "records": [service.present(item, user) for item in researched]}
 
 
 @router.get("/cards/{record_id}")
@@ -295,9 +300,30 @@ def call_request(record_id: str, request: Request) -> dict:
 
 def _with_model(record: dict) -> dict:
     try:
+        if not (record.get("research") or {}).get("at"):
+            record = service.research_and_save(record)
         return service.ensure_model_copy(record)
     except llm.LLMError as exc:
         raise HTTPException(502, f"分析生成失败：{exc}") from exc
+
+
+def _research_batch(records: list[dict]) -> list[dict]:
+    def job(record: dict) -> dict:
+        try:
+            return service.research_and_save(record)
+        except llm.LLMError as exc:
+            analysis = dict(record.get("analysis") or {})
+            gaps = list(analysis.get("gaps") or [])
+            gaps.append(f"公开动态检索失败：{exc}")
+            analysis["gaps"] = gaps
+            record["analysis"] = analysis
+            record["research_error"] = str(exc)[:180]
+            return storage.upsert_item("records", record)
+
+    if len(records) <= 1:
+        return [job(record) for record in records]
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        return list(pool.map(job, records))
 
 
 def _rows(content: bytes) -> list[dict[str, str]]:

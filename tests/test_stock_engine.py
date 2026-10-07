@@ -166,6 +166,15 @@ class EngineTests(unittest.TestCase):
         self.assertEqual(lines.count(engine._SOFT_HINT), 1)
         self.assertIn("核对情况", blob)
 
+    def test_regular_account_only_sees_own_records(self):
+        c3 = {"username": "c3", "role": "user"}
+        admin = {"username": "admin", "role": "admin"}
+        self.assertTrue(service.can_read({"owner": "c3"}, c3))
+        self.assertFalse(service.can_read({"owner": "admin"}, c3))
+        self.assertFalse(service.can_read({"owner": ""}, c3))
+        self.assertTrue(service.can_read({"owner": "admin"}, admin))
+        self.assertTrue(service.can_read({"owner": ""}, admin))
+
     def test_login_does_not_split_modules(self):
         from backend import auth
 

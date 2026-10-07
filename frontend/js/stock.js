@@ -64,8 +64,15 @@ function navHost() {
   return document.querySelector("#navStock") || document.querySelector("#nav");
 }
 
+const ADMIN_VIEWS = new Set(["base", "pool", "grants", "align", "playbooks", "settings"]);
+
+function navItems() {
+  if (state.me && state.me.role === "admin") return ITEMS;
+  return ITEMS.filter(([id]) => !ADMIN_VIEWS.has(id));
+}
+
 function renderNav() {
-  const items = ITEMS;
+  const items = navItems();
   navHost().innerHTML = `<div class="side-group"><div class="side-label">存量</div>${items
     .map(
       ([id, label], index) =>
@@ -86,6 +93,9 @@ function productsOf(record) {
 }
 
 async function openView(name) {
+  if (ADMIN_VIEWS.has(name) && (!state.me || state.me.role !== "admin")) {
+    name = "upload";
+  }
   state.view = name;
   state.detail = null;
   renderNav();
@@ -101,9 +111,9 @@ async function openView(name) {
 function renderUpload() {
   page(
     "上传名单",
-    "导入自己手上的客户表。系统按存量规则分析，结果只留在本账号下。",
+    "导入自己手上的客户表。系统会检索新闻、招聘和公众号，再决定是否进入可触达。",
     `<form id="uploadForm" class="panel"><div class="panel-h"><h2>Excel</h2></div>
-      <p>需要公司全称。电话、联系人、行业、已购经营范围、公开信号、备注有则填写，表头可以不完全一致。</p>
+      <p>需要公司全称。上传后会检索各公司的公开动态，这一步会比只读表格久一些。</p>
       <input id="uploadFile" type="file" accept=".xlsx" required />
       <div class="row-actions"><button class="btn" id="uploadSubmit" type="submit">开始分析</button></div>
       <div id="uploadResult"></div>
@@ -118,7 +128,7 @@ function renderUpload() {
     const submit = $("#uploadSubmit");
     if (submit) {
       submit.disabled = true;
-      submit.textContent = "模型分析中…";
+      submit.textContent = "正在检索公开动态…";
     }
     try {
       const data = await api("/api/stock/uploads", { method: "POST", body });
@@ -128,7 +138,7 @@ function renderUpload() {
             `<tr><td>${esc(row.company)}</td><td>${esc(STATUS[row.status] || row.status)}</td><td>${esc(productsOf(row))}</td><td>${esc(row.source_label)}</td></tr>`,
         )
         .join("");
-      $("#uploadResult").innerHTML = `<p>已分析 ${data.count} 家，同一公司不会并到其他部门。</p><div class="table-wrap"><table><thead><tr><th>公司</th><th>去向</th><th>并列建议</th><th>来源</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+      $("#uploadResult").innerHTML = `<p>已检索 ${data.count} 家。能在新闻、招聘或公众号里看到组织动作的，会出现在可触达。</p><div class="table-wrap"><table><thead><tr><th>公司</th><th>去向</th><th>并列建议</th><th>来源</th></tr></thead><tbody>${rows}</tbody></table></div>`;
       toast("分析完成");
     } catch (err) {
       toast(err.message);
@@ -175,7 +185,7 @@ function downloadCsv(filename, header, rows) {
 
 async function renderList(name) {
   const titles = {
-    reachable: ["可触达", "确认信号已经成立的客户都在这里，不按张数截断。建议产品并列，没有优先级。"],
+    reachable: ["可触达", "公开动态里已经能看到这家公司在组织、用人上有动作。建议产品并列，没有优先级。"],
     incubation: ["孵化期", "只有先导信号。系统不建议外呼。这里的联系人号码都不展示，获准后 36 小时内才可见。"],
     trial: ["试分析", "还没有形成先导信号。只留在本账号，不进公共池。"],
     base: ["公海底表", "已导入、还没有确认信号、也还没分给部门的客户。公海成交表要先预览再确认。"],
@@ -438,9 +448,39 @@ function openAssign(id, row) {
   };
 }
 
+function bindStockModal() {
+  const modal = $("#stockModal");
+  if (!modal || modal.dataset.bound) return;
+  modal.dataset.bound = "1";
+  $("#stockModalClose").onclick = closeStockModal;
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeStockModal();
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modal.classList.contains("hidden")) closeStockModal();
+  });
+}
+
+function openStockModal(title) {
+  bindStockModal();
+  const modal = $("#stockModal");
+  modal.classList.remove("hidden");
+  const heading = $("#stockModalTitle");
+  if (heading) heading.textContent = title || "客户";
+  return $("#stockModalBody");
+}
+
+function closeStockModal() {
+  const modal = $("#stockModal");
+  if (!modal) return;
+  modal.classList.add("hidden");
+  const body = $("#stockModalBody");
+  if (body) body.innerHTML = "";
+}
+
 function startStockWait(title) {
   const started = Date.now();
-  const box = $("#detail");
+  const box = openStockModal(title);
   if (box) {
     box.innerHTML = `<div class="panel stock-wait">
       <div class="spinner" aria-hidden="true"></div>
@@ -467,7 +507,7 @@ async function openCard(id) {
     data = await api(`/api/stock/cards/${id}`);
   } catch (err) {
     stopWait();
-    const box = $("#detail");
+    const box = openStockModal("没有写完");
     if (box) {
       box.innerHTML = `<div class="panel"><p>这次没有写完：${esc(err.message)}</p><div class="row-actions"><button class="btn" id="btnRetryCard" type="button">重试</button></div></div>`;
       $("#btnRetryCard").onclick = () => openCard(id);
@@ -539,15 +579,16 @@ async function openCard(id) {
       </form>`
     : "";
   const narrate = `<button class="btn ghost small" id="btnNarrate" type="button">润色五线</button>`;
-  const box = $("#detail") || host();
+  const box = openStockModal(record.company || "客户");
   const html = `${notice}<div class="panel">
-      <div class="panel-h"><h2>${esc(record.company)}</h2><span class="pill">${esc(record.source_label || "")}</span></div>
+      <p><span class="pill">${esc(record.source_label || "")}</span> ${esc(STATUS[record.status] || record.status || "")}</p>
       <p>基本面：${phoneLine}${record.phone_note ? `（${esc(record.phone_note)}）` : ""} · ${esc(record.industry || "行业未填")}${(record.industry_tags || []).length ? ` · ${esc(record.industry_tags.join("、"))}` : ""}</p>
       ${more}
       <p>已购：${esc(record.purchased_display || record.purchased_scope || "已购未填")} · 截止 ${esc(record.service_end || "—")} · 客单价 ${esc(record.unit_price || "—")}</p>
-      <p>触达时点：${esc((analysis.confirm_hits || []).join("、") || "确认信号未成立")}</p>
-      ${record.signals_text ? `<p>公开材料</p><p class="stock-copy">${esc(record.signals_text)}</p>` : ""}
-      <p>一句说明：${esc(analysis.speakable || "")}</p>
+      <p>一句说明：${esc((record.research && record.research.summary) || "还没有检索公开动态。")}</p>
+      ${(record.research && record.research.sources && record.research.sources.length)
+        ? `<details><summary>依据 ${record.research.sources.length} 条</summary>${record.research.sources.map((item) => `<p class="stock-copy">${esc(item.date || "")} ${esc(item.title)} ${esc(item.fact || "")}${item.url ? ` ${esc(item.url)}` : ""}</p>`).join("")}</details>`
+        : ""}
       <p>并列建议</p><ul>${products || "<li>暂无</li>"}</ul>
       ${data.pitch ? `<p>话术</p><p id="pitchText" class="stock-copy">${esc(data.pitch)}</p><button class="btn small" id="btnCopy" type="button">复制话术</button>` : ""}
       ${data.supplement ? `<p>补充观察</p><p class="stock-copy">${esc(data.supplement)}</p>` : ""}
@@ -556,8 +597,7 @@ async function openCard(id) {
       <div class="row-actions">${ask}${narrate}</div>
       ${call}
     </div>`;
-  if ($("#detail")) $("#detail").innerHTML = html;
-  else box.insertAdjacentHTML("beforeend", `<div id="detail">${html}</div>`);
+  if (box) box.innerHTML = html;
   $("#btnCopy") && ($("#btnCopy").onclick = async () => {
     await navigator.clipboard.writeText(data.pitch || "");
     toast("话术已复制");
@@ -799,6 +839,13 @@ async function renderSettings() {
 }
 
 window.StockApp = {
+  setUser(me) {
+    state.me = me;
+    if (state.view && ADMIN_VIEWS.has(state.view) && (!me || me.role !== "admin")) {
+      state.view = "upload";
+    }
+    if (document.querySelector("#navStock")) renderNav();
+  },
   show(view) {
     openView(view || state.view || "upload");
   },

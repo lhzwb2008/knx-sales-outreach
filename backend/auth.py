@@ -341,6 +341,19 @@ def audit_stats(range_key: str) -> dict:
     return {"range": range_key, "users": users}
 
 
+def is_admin(user: dict | None) -> bool:
+    return bool(user) and (user.get("role") or "") == "admin"
+
+
+def owns(user: dict | None, owner: str) -> bool:
+    """admin 看全部。普通账号只看 owner 等于自己的记录；没有归属的只给 admin。"""
+    if is_admin(user):
+        return True
+    if not user:
+        return False
+    return (owner or "") == (user.get("username") or "")
+
+
 def is_public_api(path: str) -> bool:
     return path in PUBLIC_API or not path.startswith("/api/")
 

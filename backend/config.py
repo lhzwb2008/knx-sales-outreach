@@ -23,6 +23,7 @@ DASHSCOPE_ENABLE_THINKING = (
 )
 DASHSCOPE_REASONING_EFFORT = os.getenv("DASHSCOPE_REASONING_EFFORT", "low").strip() or "low"
 DASHSCOPE_TIMEOUT = float(os.getenv("DASHSCOPE_TIMEOUT", "120"))
+DASHSCOPE_SEARCH_MODEL = os.getenv("DASHSCOPE_SEARCH_MODEL", "qwen-plus").strip() or "qwen-plus"
 DASHSCOPE_MAX_RETRIES = int(os.getenv("DASHSCOPE_MAX_RETRIES", "3"))
 
 AIHUBMIX_API_KEY = os.getenv("AIHUBMIX_API_KEY", "").strip()

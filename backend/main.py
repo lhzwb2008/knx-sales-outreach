@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import zipfile
 from datetime import datetime, timedelta
 from typing import Any
@@ -178,11 +179,32 @@ class AIRuleIn(BaseModel):
     experience: str
 
 
-def _lead_or_404(lead_id: str) -> dict:
+def _viewer(request: Request) -> dict:
+    user = getattr(request.state, "user", None) or auth.user_from_request(request)
+    if not user:
+        raise HTTPException(401, "请先登录")
+    return user
+
+
+def _lead_or_404(lead_id: str, request: Request) -> dict:
     lead = storage.get_item("leads", lead_id)
-    if not lead:
+    user = _viewer(request)
+    if not lead or not auth.owns(user, str(lead.get("owner") or "")):
         raise HTTPException(404, "线索不存在")
     return lead
+
+
+def _visible_lead_ids(user: dict) -> set[str] | None:
+    if auth.is_admin(user):
+        return None
+    me = user.get("username") or ""
+    return {item["id"] for item in storage.list_items("leads") if (item.get("owner") or "") == me}
+
+
+def _keep_owned(items: list[dict], lead_ids: set[str] | None) -> list[dict]:
+    if lead_ids is None:
+        return items
+    return [item for item in items if item.get("lead_id") in lead_ids]
 
 
 def _set_step(lead: dict, step: int, status: str | None = None) -> dict:
@@ -257,10 +279,14 @@ def health() -> dict:
 
 
 @app.get("/api/dashboard")
-def dashboard() -> dict:
+def dashboard(request: Request) -> dict:
+    user = _viewer(request)
+    lead_ids = _visible_lead_ids(user)
     leads = storage.list_items("leads")
-    outreach = storage.list_items("outreach")
-    wechat_todos = storage.list_items("wechat_todos")
+    if lead_ids is not None:
+        leads = [item for item in leads if item.get("id") in lead_ids]
+    outreach = _keep_owned(storage.list_items("outreach"), lead_ids)
+    wechat_todos = _keep_owned(storage.list_items("wechat_todos"), lead_ids)
     pending_wechat = [t for t in wechat_todos if t.get("status") != "done"]
     tiers: dict[str, int] = {}
     steps = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
@@ -286,38 +312,63 @@ def dashboard() -> dict:
 
 
 @app.post("/api/seed/reset")
-def api_reset_seed() -> dict:
+def api_reset_seed(request: Request) -> dict:
+    _require_admin(request)
     result = reset_and_seed()
     storage.write_collection("wechat_todos", [])
     return result
 
 
+def _export_json(zf: zipfile.ZipFile, arcname: str, payload: Any) -> None:
+    zf.writestr(arcname, json.dumps(payload, ensure_ascii=False, indent=2))
+
+
 @app.get("/api/export/data.zip")
 def export_data_zip(request: Request) -> StreamingResponse:
-    """打包当前模块的 JSON 供本地下载；不写入 Git。"""
+    """打包当前账号可见的 JSON 供本地下载；不写入 Git。管理员导出全部。"""
+    user = _viewer(request)
     storage.ensure_data_dir()
     buf = io.BytesIO()
     written = 0
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        for name in storage.COLLECTIONS:
-            path = config.DATA_DIR / f"{name}.json"
-            if not path.exists():
-                continue
-            zf.write(path, arcname=f"{name}.json")
-            written += 1
-        for path in sorted(config.DATA_DIR.glob("*.json")):
-            if path.stem in storage.COLLECTIONS or path.stem in {"users", "audit"}:
-                continue
-            if path.name.startswith("_") or path.name.startswith("._"):
-                continue
-            zf.write(path, arcname=path.name)
-            written += 1
-        stock_storage.ensure_dir()
-        for path in sorted(stock_storage.STOCK_DIR.glob("*.json")):
-            if path.name.startswith("_") or path.name.startswith("._"):
-                continue
-            zf.write(path, arcname=f"stock/{path.name}")
-            written += 1
+        if auth.is_admin(user):
+            for name in storage.COLLECTIONS:
+                path = config.DATA_DIR / f"{name}.json"
+                if not path.exists():
+                    continue
+                zf.write(path, arcname=f"{name}.json")
+                written += 1
+            for path in sorted(config.DATA_DIR.glob("*.json")):
+                if path.stem in storage.COLLECTIONS or path.stem in {"users", "audit"}:
+                    continue
+                if path.name.startswith("_") or path.name.startswith("._"):
+                    continue
+                zf.write(path, arcname=path.name)
+                written += 1
+            stock_storage.ensure_dir()
+            for path in sorted(stock_storage.STOCK_DIR.glob("*.json")):
+                if path.name.startswith("_") or path.name.startswith("._"):
+                    continue
+                zf.write(path, arcname=f"stock/{path.name}")
+                written += 1
+        else:
+            lead_ids = _visible_lead_ids(user) or set()
+            me = user.get("username") or ""
+            leads = [item for item in storage.list_items("leads") if item.get("id") in lead_ids]
+            _export_json(zf, "leads.json", leads)
+            _export_json(zf, "outreach.json", _keep_owned(storage.list_items("outreach"), lead_ids))
+            _export_json(zf, "wechat_todos.json", _keep_owned(storage.list_items("wechat_todos"), lead_ids))
+            _export_json(zf, "followups.json", _keep_owned(storage.list_items("followups"), lead_ids))
+            _export_json(
+                zf,
+                "profiles.json",
+                [item for item in storage.list_items("profiles") if item.get("lead_id") in lead_ids],
+            )
+            stock_records = [
+                item for item in stock_storage.list_items("records") if (item.get("owner") or "") == me
+            ]
+            _export_json(zf, "stock/records.json", stock_records)
+            written = 6
     if written == 0:
         raise HTTPException(404, "暂无可导出的数据文件")
     buf.seek(0)
@@ -357,14 +408,20 @@ def help_generate_image(force: bool = False) -> dict:
 
 
 @app.post("/api/import/excel")
-async def import_excel(file: UploadFile = File(...)) -> dict:
+async def import_excel(request: Request, file: UploadFile = File(...)) -> dict:
     if not file.filename or not file.filename.lower().endswith((".xlsx", ".xlsm", ".xltx")):
         raise HTTPException(400, "请上传 Excel 文件（.xlsx）")
     content = await file.read()
     if not content:
         raise HTTPException(400, "文件为空")
     try:
-        result = excel_import.parse_leads_with_llm(content, file.filename)
+        user = _viewer(request)
+        result = excel_import.parse_leads_with_llm(
+            content,
+            file.filename,
+            owner=user.get("username") or "",
+            see_all=auth.is_admin(user),
+        )
     except llm.LLMError as e:
         raise HTTPException(502, "名单解析失败，请检查表格内容后重试") from e
     except Exception as e:
@@ -373,11 +430,12 @@ async def import_excel(file: UploadFile = File(...)) -> dict:
 
 
 @app.post("/api/import/overwrite")
-def import_overwrite(body: ImportOverwriteIn) -> dict:
+def import_overwrite(body: ImportOverwriteIn, request: Request) -> dict:
     updated: list[dict] = []
     errors: list[str] = []
     for item in body.items:
         try:
+            _lead_or_404(item.existing_id, request)
             updated.append(
                 excel_import.apply_overwrite(item.existing_id, item.incoming.model_dump())
             )
@@ -389,15 +447,21 @@ def import_overwrite(body: ImportOverwriteIn) -> dict:
 
 
 @app.get("/api/leads")
-def list_leads() -> list:
-    leads = sorted(storage.list_items("leads"), key=lambda x: x.get("updated_at", ""), reverse=True)
+def list_leads(request: Request) -> list:
+    user = _viewer(request)
+    leads = storage.list_items("leads")
+    if not auth.is_admin(user):
+        me = user.get("username") or ""
+        leads = [item for item in leads if (item.get("owner") or "") == me]
+    leads = sorted(leads, key=lambda x: x.get("updated_at", ""), reverse=True)
     return [excel_import.present_lead(lead) for lead in leads]
 
 
 @app.post("/api/leads")
-def create_lead(body: LeadIn) -> dict:
+def create_lead(body: LeadIn, request: Request) -> dict:
     item = body.model_dump()
     item["id"] = storage.new_id("L")
+    item["owner"] = _viewer(request).get("username") or ""
     item["workflow_step"] = 1
     item["contacts"] = [excel_import._contact_from_incoming(item)]
     excel_import.sync_primary_contact(item)
@@ -412,8 +476,8 @@ class ContactIn(BaseModel):
 
 
 @app.post("/api/leads/{lead_id}/contacts")
-def add_lead_contact(lead_id: str, body: ContactIn) -> dict:
-    lead = _lead_or_404(lead_id)
+def add_lead_contact(lead_id: str, body: ContactIn, request: Request) -> dict:
+    lead = _lead_or_404(lead_id, request)
     name = body.name.strip() or "客户"
     phone = body.phone.strip()
     title = body.title.strip()
@@ -448,14 +512,15 @@ def add_lead_contact(lead_id: str, body: ContactIn) -> dict:
 
 
 @app.put("/api/leads/{lead_id}")
-def update_lead(lead_id: str, body: LeadIn) -> dict:
-    existing = _lead_or_404(lead_id)
+def update_lead(lead_id: str, body: LeadIn, request: Request) -> dict:
+    existing = _lead_or_404(lead_id, request)
     item = {**existing, **body.model_dump(), "id": lead_id}
     return storage.upsert_item("leads", item)
 
 
 @app.delete("/api/leads/{lead_id}")
-def delete_lead(lead_id: str) -> dict:
+def delete_lead(lead_id: str, request: Request) -> dict:
+    _lead_or_404(lead_id, request)
     if not storage.delete_item("leads", lead_id):
         raise HTTPException(404, "线索不存在")
     storage.write_collection(
@@ -475,21 +540,21 @@ def delete_lead(lead_id: str) -> dict:
 
 
 @app.post("/api/leads/{lead_id}/analyze")
-def analyze(lead_id: str) -> dict:
+def analyze(lead_id: str, request: Request) -> dict:
+    lead = _lead_or_404(lead_id, request)
     try:
         result = engine.analyze_lead(lead_id)
     except ValueError as e:
         raise HTTPException(404, str(e)) from e
-    lead = _lead_or_404(lead_id)
     _set_step(lead, 2, "已分析")
     result["lead"] = storage.get_item("leads", lead_id)
     return result
 
 
 @app.post("/api/ai/analyze-need")
-def ai_analyze_need(body: AIAnalyzeIn) -> dict:
+def ai_analyze_need(body: AIAnalyzeIn, request: Request) -> dict:
     """AI 全自动需求分析：规则匹配 + 模型解读，结果写回线索。"""
-    lead = _lead_or_404(body.lead_id)
+    lead = _lead_or_404(body.lead_id, request)
     if body.supplement.strip():
         lead["manual_supplement"] = body.supplement.strip()
         storage.upsert_item("leads", lead)
@@ -547,7 +612,7 @@ def ai_analyze_need(body: AIAnalyzeIn) -> dict:
     except llm.LLMError as e:
         raise HTTPException(502, "需求分析失败，请稍后重试") from e
 
-    lead = _lead_or_404(body.lead_id)
+    lead = _lead_or_404(body.lead_id, request)
     lead["need_analysis"] = str(insights.get("need_analysis") or "").strip()
     lead["recommended_products"] = overseas.merge_products(
         str(insights.get("recommended_products") or "").strip(),
@@ -577,12 +642,13 @@ def ai_analyze_need(body: AIAnalyzeIn) -> dict:
 
 
 @app.get("/api/profiles")
-def list_profiles() -> list:
-    return storage.list_items("profiles")
+def list_profiles(request: Request) -> list:
+    return _keep_owned(storage.list_items("profiles"), _visible_lead_ids(_viewer(request)))
 
 
 @app.get("/api/profiles/by-lead/{lead_id}")
-def profile_by_lead(lead_id: str) -> dict:
+def profile_by_lead(lead_id: str, request: Request) -> dict:
+    _lead_or_404(lead_id, request)
     for p in storage.list_items("profiles"):
         if p.get("lead_id") == lead_id:
             return p
@@ -590,7 +656,8 @@ def profile_by_lead(lead_id: str) -> dict:
 
 
 @app.post("/api/profiles")
-def save_profile(body: ProfileIn) -> dict:
+def save_profile(body: ProfileIn, request: Request) -> dict:
+    _lead_or_404(body.lead_id, request)
     existing = None
     for p in storage.list_items("profiles"):
         if p.get("lead_id") == body.lead_id:
@@ -693,13 +760,14 @@ def put_scoring(body: dict[str, Any]) -> dict:
 
 
 @app.get("/api/outreach")
-def list_outreach() -> list:
-    return sorted(storage.list_items("outreach"), key=lambda x: x.get("created_at", ""), reverse=True)
+def list_outreach(request: Request) -> list:
+    rows = _keep_owned(storage.list_items("outreach"), _visible_lead_ids(_viewer(request)))
+    return sorted(rows, key=lambda x: x.get("created_at", ""), reverse=True)
 
 
 @app.post("/api/outreach")
-def create_outreach(body: OutreachIn) -> dict:
-    _lead_or_404(body.lead_id)
+def create_outreach(body: OutreachIn, request: Request) -> dict:
+    _lead_or_404(body.lead_id, request)
     item = body.model_dump()
     item["id"] = storage.new_id("O")
     item["created_at"] = storage.now_iso()
@@ -743,13 +811,14 @@ def create_outreach(body: OutreachIn) -> dict:
 
 
 @app.get("/api/wechat-todos")
-def list_wechat_todos() -> list:
-    return sorted(storage.list_items("wechat_todos"), key=lambda x: x.get("due_at", ""))
+def list_wechat_todos(request: Request) -> list:
+    rows = _keep_owned(storage.list_items("wechat_todos"), _visible_lead_ids(_viewer(request)))
+    return sorted(rows, key=lambda x: x.get("due_at", ""))
 
 
 @app.post("/api/wechat-todos")
-def create_wechat_todo(body: WechatTodoIn) -> dict:
-    lead = _lead_or_404(body.lead_id)
+def create_wechat_todo(body: WechatTodoIn, request: Request) -> dict:
+    lead = _lead_or_404(body.lead_id, request)
     item = body.model_dump()
     item["id"] = storage.new_id("W")
     item["company"] = lead.get("company")
@@ -764,33 +833,37 @@ def create_wechat_todo(body: WechatTodoIn) -> dict:
 
 
 @app.post("/api/wechat-todos/{tid}/done")
-def complete_wechat_todo(tid: str) -> dict:
+def complete_wechat_todo(tid: str, request: Request) -> dict:
     item = storage.get_item("wechat_todos", tid)
     if not item:
         raise HTTPException(404)
+    _lead_or_404(str(item.get("lead_id") or ""), request)
     item["status"] = "done"
     item["done_at"] = storage.now_iso()
     return storage.upsert_item("wechat_todos", item)
 
 
 @app.get("/api/followups")
-def list_followups() -> list:
-    return sorted(storage.list_items("followups"), key=lambda x: x.get("due_at", ""))
+def list_followups(request: Request) -> list:
+    rows = _keep_owned(storage.list_items("followups"), _visible_lead_ids(_viewer(request)))
+    return sorted(rows, key=lambda x: x.get("due_at", ""))
 
 
 @app.post("/api/followups/{fid}/done")
-def complete_followup(fid: str) -> dict:
+def complete_followup(fid: str, request: Request) -> dict:
     item = storage.get_item("followups", fid)
     if not item:
         raise HTTPException(404)
+    if item.get("lead_id"):
+        _lead_or_404(str(item.get("lead_id")), request)
     item["status"] = "done"
     item["done_at"] = storage.now_iso()
     return storage.upsert_item("followups", item)
 
 
 @app.post("/api/ai/enrich-profile")
-def ai_enrich_profile(body: AIProfileIn) -> dict:
-    lead = _lead_or_404(body.lead_id)
+def ai_enrich_profile(body: AIProfileIn, request: Request) -> dict:
+    lead = _lead_or_404(body.lead_id, request)
     profile = None
     for p in storage.list_items("profiles"):
         if p.get("lead_id") == body.lead_id:
@@ -822,8 +895,8 @@ def ai_enrich_profile(body: AIProfileIn) -> dict:
 
 
 @app.post("/api/ai/generate-script")
-def ai_generate_script(body: AIScriptIn) -> dict:
-    lead = _lead_or_404(body.lead_id)
+def ai_generate_script(body: AIScriptIn, request: Request) -> dict:
+    lead = _lead_or_404(body.lead_id, request)
     try:
         analysis = engine.analyze_lead(body.lead_id)
     except Exception:

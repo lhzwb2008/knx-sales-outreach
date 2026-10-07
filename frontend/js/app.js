@@ -1401,6 +1401,7 @@ function applySession(me) {
   const name = $("#sessionName");
   if (name) name.textContent = me.department || me.display_name || me.username;
   $("#navAudit")?.classList.toggle("hidden", me.role !== "admin");
+  window.StockApp?.setUser(me);
   $("#loginGate")?.classList.add("hidden");
   return true;
 }
