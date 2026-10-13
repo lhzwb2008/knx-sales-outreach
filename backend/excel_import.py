@@ -25,6 +25,9 @@ def normalize_company(company: str) -> str:
     return re.sub(r"\s+", "", str(company or "")).casefold()
 
 
+_THREE_DIGIT_AREAS = {"010", "020", "021", "022", "023", "024", "025", "027", "028", "029"}
+
+
 def normalize_phone(phone: str) -> str:
     digits = re.sub(r"\D", "", str(phone or ""))
     if digits.startswith("00") and len(digits) > 11:
@@ -34,6 +37,26 @@ def normalize_phone(phone: str) -> str:
         if len(rest) == 11 and rest.startswith("1"):
             digits = rest
     return digits
+
+
+def callable_phone(phone: str) -> bool:
+    """手机 11 位（1 开头）；座机为区号加 7 或 8 位。"""
+    digits = normalize_phone(phone)
+    if re.fullmatch(r"1[3-9]\d{9}", digits):
+        return True
+    if not digits.startswith("0"):
+        return False
+    if digits[:3] in _THREE_DIGIT_AREAS:
+        local = digits[3:]
+    else:
+        local = digits[4:]
+    return len(local) in (7, 8) and local.isdigit()
+
+
+def lead_has_callable_phone(lead: dict[str, Any]) -> bool:
+    phones = [lead.get("phone") or ""]
+    phones.extend(contact.get("phone") or "" for contact in contacts_of(lead))
+    return any(callable_phone(phone) for phone in phones)
 
 
 def contacts_of(lead: dict[str, Any]) -> list[dict[str, str]]:
@@ -234,6 +257,7 @@ def parse_leads_with_llm(
         "mapping_notes:string, skipped_rows:number}。"
         "同一公司有多位联系人时，每人单独输出一条，不要合并。"
         "name 可只保留姓或称呼；phone 尽量规范化为数字；company 必填，缺公司的行放入跳过。"
+        "电话不是 11 位手机、也不是区号加 7 到 8 位座机的行放入跳过，不要编造成合法号码。"
         "source 固定为「Excel导入」。不要编造电话或不存在的公司。"
     )
     user = (
@@ -260,6 +284,15 @@ def parse_leads_with_llm(
             seen_in_file[key] = len(incoming_rows)
         incoming_rows.append(incoming)
 
+    invalid_phones = 0
+    callable_rows: list[dict[str, str]] = []
+    for incoming in incoming_rows:
+        if not callable_phone(incoming["phone"]):
+            invalid_phones += 1
+            continue
+        callable_rows.append(incoming)
+    incoming_rows = callable_rows
+
     grouped: dict[str, list[dict[str, str]]] = {}
     group_order: list[str] = []
     for incoming in incoming_rows:
@@ -284,13 +317,13 @@ def parse_leads_with_llm(
         fresh_rows: list[dict[str, str]] = []
         for incoming in rows:
             phone_key = normalize_phone(incoming["phone"])
-            owner = existing_by_phone.get(phone_key) if phone_key else None
-            if owner and (not company_lead or owner.get("id") != company_lead.get("id")):
+            matched = existing_by_phone.get(phone_key) if phone_key else None
+            if matched and (not company_lead or matched.get("id") != company_lead.get("id")):
                 conflicts.append(
                     {
-                        "phone": incoming["phone"] or owner.get("phone") or "",
+                        "phone": incoming["phone"] or matched.get("phone") or "",
                         "phone_key": phone_key,
-                        "existing": _public_existing(owner),
+                        "existing": _public_existing(matched),
                         "incoming": incoming,
                     }
                 )
@@ -354,6 +387,8 @@ def parse_leads_with_llm(
 
     notes = str(data.get("mapping_notes") or "").strip()
     extras = []
+    if invalid_phones:
+        extras.append(f"电话不符合要求已跳过 {invalid_phones} 行（手机需 11 位，座机需区号加 7 到 8 位）")
     if file_dupes:
         extras.append(f"同一文件内重复手机号已合并 {file_dupes} 条（保留后出现的一行）")
     if merged:
@@ -366,7 +401,7 @@ def parse_leads_with_llm(
         "imported": created,
         "merged": merged,
         "companies": len(saved),
-        "skipped": int(data.get("skipped_rows") or 0) + file_dupes,
+        "skipped": int(data.get("skipped_rows") or 0) + file_dupes + invalid_phones,
         "conflicts": conflicts,
         "mapping_notes": mapping_notes,
         "preview": {

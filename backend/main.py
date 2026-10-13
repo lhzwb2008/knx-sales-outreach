@@ -186,6 +186,11 @@ def _viewer(request: Request) -> dict:
     return user
 
 
+def _require_callable_phone(lead: dict) -> None:
+    if not excel_import.lead_has_callable_phone(lead):
+        raise HTTPException(400, "电话不符合要求，不能进入触达。手机需为 11 位，座机需为区号加 7 到 8 位")
+
+
 def _lead_or_404(lead_id: str, request: Request) -> dict:
     lead = storage.get_item("leads", lead_id)
     user = _viewer(request)
@@ -463,6 +468,8 @@ def create_lead(body: LeadIn, request: Request) -> dict:
     item["id"] = storage.new_id("L")
     item["owner"] = _viewer(request).get("username") or ""
     item["workflow_step"] = 1
+    if not excel_import.callable_phone(item.get("phone") or ""):
+        raise HTTPException(400, "电话不符合要求。手机需为 11 位，座机需为区号加 7 到 8 位")
     item["contacts"] = [excel_import._contact_from_incoming(item)]
     excel_import.sync_primary_contact(item)
     return excel_import.present_lead(storage.upsert_item("leads", item))
@@ -482,6 +489,8 @@ def add_lead_contact(lead_id: str, body: ContactIn, request: Request) -> dict:
     phone = body.phone.strip()
     title = body.title.strip()
     notes = body.notes.strip()
+    if not excel_import.callable_phone(phone):
+        raise HTTPException(400, "电话不符合要求。手机需为 11 位，座机需为区号加 7 到 8 位")
     if not any((name, phone, title, notes)) or (name == "客户" and not any((phone, title, notes))):
         raise HTTPException(400, "请至少填写联系人、电话或备注")
     phone_key = excel_import.normalize_phone(phone)
@@ -542,6 +551,7 @@ def delete_lead(lead_id: str, request: Request) -> dict:
 @app.post("/api/leads/{lead_id}/analyze")
 def analyze(lead_id: str, request: Request) -> dict:
     lead = _lead_or_404(lead_id, request)
+    _require_callable_phone(lead)
     try:
         result = engine.analyze_lead(lead_id)
     except ValueError as e:
@@ -555,6 +565,7 @@ def analyze(lead_id: str, request: Request) -> dict:
 def ai_analyze_need(body: AIAnalyzeIn, request: Request) -> dict:
     """AI 全自动需求分析：规则匹配 + 模型解读，结果写回线索。"""
     lead = _lead_or_404(body.lead_id, request)
+    _require_callable_phone(lead)
     if body.supplement.strip():
         lead["manual_supplement"] = body.supplement.strip()
         storage.upsert_item("leads", lead)
@@ -767,7 +778,7 @@ def list_outreach(request: Request) -> list:
 
 @app.post("/api/outreach")
 def create_outreach(body: OutreachIn, request: Request) -> dict:
-    _lead_or_404(body.lead_id, request)
+    _require_callable_phone(_lead_or_404(body.lead_id, request))
     item = body.model_dump()
     item["id"] = storage.new_id("O")
     item["created_at"] = storage.now_iso()

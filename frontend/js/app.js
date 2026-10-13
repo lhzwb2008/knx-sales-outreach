@@ -819,10 +819,31 @@ async function runAiAnalyze(leadId, supplement = "", btn = null) {
   return res;
 }
 
+function callablePhone(phone) {
+  let digits = String(phone || "").replace(/\D/g, "");
+  if (digits.startsWith("0086")) digits = digits.slice(4);
+  else if (digits.startsWith("86") && digits.length >= 13 && digits[2] === "1") digits = digits.slice(2);
+  if (/^1[3-9]\d{9}$/.test(digits)) return true;
+  if (!digits.startsWith("0")) return false;
+  const three = new Set(["010", "020", "021", "022", "023", "024", "025", "027", "028", "029"]);
+  const local = three.has(digits.slice(0, 3)) ? digits.slice(3) : digits.slice(4);
+  return local.length === 7 || local.length === 8;
+}
+
+function leadCallable(lead) {
+  const phones = leadContacts(lead).map((item) => item.phone);
+  if (lead?.phone) phones.push(lead.phone);
+  return phones.some(callablePhone);
+}
+
 async function openLeadModal(id, autoAnalyze = false) {
   state.currentLeadId = id;
   const lead = state.leads.find((l) => l.id === id);
   if (!lead) return;
+  if (!leadCallable(lead)) {
+    toast("电话不符合要求，不能进入触达。手机需为 11 位，座机需为区号加 7 到 8 位");
+    return;
+  }
   const modal = $("#leadModal");
   modal.classList.remove("hidden");
   renderLeadModalContent(lead, state.analysis?.lead?.id === id ? state.analysis : {});
