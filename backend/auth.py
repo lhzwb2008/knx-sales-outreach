@@ -22,7 +22,8 @@ AUDIT_FILE = "audit"
 AUDIT_LIMIT = 8000
 PUBLIC_API = {"/api/health", "/api/auth/login"}
 
-# 仅在 users.json 不存在时写入。改这里不会覆盖已经登录过的线上账户。
+# 启动时按 username 补缺，不覆盖已有账号的密码/角色。
+# 新开事业部账号：在这里加一行，部署重启后写入 data/users.json。
 SEED_USERS = (
     {"username": "admin", "password": "Admin@knx2026", "display_name": "管理员", "department": "管理", "role": "admin"},
     {"username": "a", "password": "BuA@knx2026", "display_name": "事业部A", "department": "事业部A", "role": "user"},
@@ -30,6 +31,7 @@ SEED_USERS = (
     {"username": "c1", "password": "BuC1@knx2026", "display_name": "事业部C1", "department": "事业部C1", "role": "user"},
     {"username": "c2", "password": "BuC2@knx2026", "display_name": "事业部C2", "department": "事业部C2", "role": "user"},
     {"username": "c3", "password": "BuC3@knx2026", "display_name": "事业部C3", "department": "事业部C3", "role": "user"},
+    {"username": "d", "password": "BuD@knx2026", "display_name": "事业部D", "department": "事业部D", "role": "user"},
 )
 
 # 仅补缺，不覆盖已有账号密码。存量账号和陌拜账号互不进入对方工作台。
@@ -151,14 +153,29 @@ def _materialize_user(item: dict, now: str) -> dict:
     return row
 
 
+def _seed_catalog() -> tuple[dict, ...]:
+    return (*SEED_USERS, *STOCK_SEED_USERS)
+
+
 def ensure_users() -> None:
-    """只在还没有账户文件时初始化。已有 users.json 一律不改，避免覆盖线上正在使用的账号。"""
+    """补齐种子账号。已有 username 不改密码、角色或部门，避免覆盖线上正在使用的账号。"""
+    storage.ensure_data_dir()
     path = DATA_DIR / f"{USERS_FILE}.json"
-    if path.exists():
-        return
+    users = list_users() if path.exists() else []
+    if not isinstance(users, list):
+        users = []
+    known = {str(user.get("username") or "") for user in users}
     now = storage.now_iso()
-    users = [_materialize_user(item, now) for item in (*SEED_USERS, *STOCK_SEED_USERS)]
-    storage.write_collection(USERS_FILE, users)
+    added = False
+    for item in _seed_catalog():
+        name = item["username"]
+        if name in known:
+            continue
+        users.append(_materialize_user(item, now))
+        known.add(name)
+        added = True
+    if added or not path.exists():
+        storage.write_collection(USERS_FILE, users)
 
 
 def list_users() -> list[dict]:
